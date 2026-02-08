@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.log
+_logs/
+Backup/
+.agent/
+.claude/
+stdout.txt
+stderr.txt
+pip_list.txt
+check_out.txt
+check_sys.txt

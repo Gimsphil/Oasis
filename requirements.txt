@@ -1,0 +1,20 @@
+# 산출내역 독립 실행 프로그램 의존성
+# 설치 명령: pip install -r requirements.txt
+
+# GUI 프레임워크
+PyQt6>=6.4.0
+
+# 데이터 처리
+pandas>=1.5.0
+numpy>=1.23.0
+
+# 데이터베이스
+# sqlite3는 Python 표준 라이브러리에 포함됨
+
+# 엑셀 파일 처리
+openpyxl>=3.0.10
+xlrd>=2.0.1
+
+# 기타 유틸리티
+python-dateutil>=2.8.0
+pytz>=2022.1
