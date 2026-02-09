@@ -6,6 +6,30 @@ import subprocess
 import time
 import datetime
 
+# Fix encoding for Windows console output
+if sys.stdout.encoding.lower() != 'utf-8':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+# Redirect stdout/stderr to file for debugging
+class DebugOutput:
+    def __init__(self):
+        self.file = open("app_debug_output.txt", "w", encoding="utf-8")
+        self.terminal = sys.stdout
+    
+    def write(self, msg):
+        self.file.write(msg)
+        self.file.flush()
+        self.terminal.write(msg)
+    
+    def flush(self):
+        self.file.flush()
+        self.terminal.flush()
+
+# Uncomment this line to enable debug output to file
+# sys.stdout = DebugOutput()
+
 # [DEBUG] Critical File Logging
 def log_to_file(msg):
     try:
@@ -79,7 +103,19 @@ except Exception as e:
     sys.exit(1)
 
 def main():
+    # Write debug info to file IMMEDIATELY
+    debug_file = None
     try:
+        debug_file = open("app_startup_debug.txt", "w", encoding="utf-8")
+        debug_file.write(f"=== OASIS Startup Debug ===\n")
+        debug_file.write(f"Time: {datetime.datetime.now()}\n")
+        debug_file.write(f"Python: {sys.executable}\n")
+        debug_file.write(f"CWD: {os.getcwd()}\n\n")
+        debug_file.flush()
+        
+        debug_file.write("[INFO] Starting Application...\n")
+        debug_file.flush()
+        
         print("[INFO] Starting Application...")
         print(f"[INFO] Current directory: {current_dir}")
         
@@ -137,18 +173,30 @@ def main():
         window.activateWindow()  # 윈도우 활성화
         print("[OK] Window displayed successfully")
         print("\n" + "="*60)
-        print("✅ 산출내역 관리 시스템이 시작되었습니다!")
+        print("[SUCCESS] 산출내역 관리 시스템이 시작되었습니다!")
         print("="*60 + "\n")
         
         # 정상 실행
-        sys.exit(app.exec())
+        debug_file.write("[INFO] Starting event loop...\n")
+        debug_file.flush()
+        result = app.exec()
+        debug_file.write(f"[INFO] Event loop ended with code: {result}\n")
+        debug_file.flush()
+        sys.exit(result)
 
     except Exception as e:
         error_msg = f"RUNTIME ERROR:\n{str(e)}\n\n{traceback.format_exc()}"
         print(error_msg)
         log_to_file(error_msg)
+        debug_file.write(f"ERROR: {error_msg}\n")
+        debug_file.flush()
         msgbox("Runtime Error", error_msg, 0x10)
         # sys.exit(1) # Don't exit immediately, allow user to see console
+    
+    finally:
+        # 반드시 파일 닫기
+        if debug_file:
+            debug_file.close()
 
 if __name__ == "__main__":
     try:

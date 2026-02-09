@@ -98,6 +98,9 @@ class TableEventFilter(QObject):
             # 기타 단축키 로직 (KeyPress 전용)
             if event.type() == QEvent.Type.KeyPress:
                 key = event.key()
+                ctrl = event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                self._log(f"KeyPress: key={key}, modifiers={event.modifiers()} (Ctrl={bool(ctrl)}) on {obj}")
+                
                 # 테이블 객체 또는 뷰포트에서 발생한 경우
                 target_table = None
                 curr = obj
@@ -108,27 +111,58 @@ class TableEventFilter(QObject):
                     curr = curr.parent() if hasattr(curr, "parent") else None
 
                 if target_table:
-                    if key == Qt.Key.Key_N and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+                    # [STABILIZED] Modifier 체크를 bitwise AND로 변경하여 NumLock/CapsLock 등에도 대응
+                    if key == Qt.Key.Key_N and ctrl:
                         row = target_table.currentRow()
                         idx = max(0, row)
                         self.parent_tab.record_undo(target_table, "insert", idx)
                         target_table.insertRow(idx)
                         return True
-                    
-                    if key == Qt.Key.Key_Y and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+
+                    if key == Qt.Key.Key_Y and ctrl:
                         row = target_table.currentRow()
-                        if row >= 0 and target_table.rowCount() > 1:
+                        if row >= 0:
                             item_texts = []
                             for c in range(target_table.columnCount()):
                                 item = target_table.item(row, c)
                                 item_texts.append(item.text() if item else "")
                             self.parent_tab.record_undo(target_table, "delete", row, item_texts)
                             target_table.removeRow(row)
+                            # [NEW] 행 삭제 후 그리드 유지를 위해 마지막에 빈 행 추가
+                            target_table.insertRow(target_table.rowCount())
                         return True
 
-                    if key == Qt.Key.Key_Z and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+                    if key == Qt.Key.Key_Z and ctrl:
                         self.parent_tab.undo()
                         return True
+
+                    # [NEW] F3 → 산출일위표 토글 (매뉴얼: 산출목록에서 F3으로 산출일위대가 표시/숨기기)
+                    if key == Qt.Key.Key_F3 and target_table == getattr(self.parent_tab, 'eulji_table', None):
+                        trigger = getattr(self.parent_tab, 'unit_price_trigger', None)
+                        if trigger and trigger.popup:
+                            if trigger.popup.isVisible():
+                                trigger.popup.hide_popup()
+                            else:
+                                current_row = target_table.currentRow()
+                                current_col = target_table.currentColumn()
+                                item_col = self.parent_tab.EULJI_COLS.get("ITEM", 5)
+                                trigger.handle_cell_selection(current_row, item_col)
+                        return True
+
+                    # [NEW] Enter → 산출목록 컬럼에서 Enter 시 산출일위표에 포커스 이동
+                    if key in [Qt.Key.Key_Return, Qt.Key.Key_Enter]:
+                        if target_table == getattr(self.parent_tab, 'eulji_table', None):
+                            current_col = target_table.currentColumn()
+                            item_col = self.parent_tab.EULJI_COLS.get("ITEM", 5)
+                            if current_col == item_col:
+                                trigger = getattr(self.parent_tab, 'unit_price_trigger', None)
+                                if trigger and trigger.popup and trigger.popup.isVisible():
+                                    # 산출일위표가 열려있으면 해당 팝업의 테이블에 포커스 이동
+                                    trigger.popup.table.setFocus()
+                                    if trigger.popup.table.rowCount() > 0:
+                                        trigger.popup.table.setCurrentCell(0, trigger.popup.UNIT_PRICE_COLS["LIST"])
+                                    return True
+                            # 산출목록 컬럼이 아니면 기본 Enter 동작(다음 행 이동)은 column_settings에서 처리
 
                     if key == Qt.Key.Key_Escape:
                         if target_table == self.parent_tab.eulji_table:

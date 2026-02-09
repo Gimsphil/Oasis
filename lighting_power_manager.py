@@ -14,8 +14,19 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QPushButton, QHeaderView, QAbstractItemView,
     QRadioButton, QButtonGroup
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer, QMimeData
-from PyQt6.QtGui import QFont, QColor, QDrag, QPalette
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer
+from PyQt6.QtGui import QFont, QColor, QPalette
+
+# QMimeData와 QDrag는 버전에 따라 위치가 다를 수 있음
+try:
+    from PyQt6.QtCore import QMimeData
+except ImportError:
+    from PyQt6.QtGui import QMimeData
+
+try:
+    from PyQt6.QtGui import QDrag
+except ImportError:
+    from PyQt6.QtCore import QDrag
 
 from database_reference_popup import DatabaseReferencePopup
 from utils.column_settings import CleanStyleDelegate
@@ -1296,7 +1307,7 @@ class LightingPowerPopup(QDialog):
                 self.reference_popup.parent_popup = self  # 명시적 설정
             
             # 창 표시 데이터 준비 (현재 행/열 동기화)
-            self.reference_popup.prepare_show(current_row, current_col)
+            self.reference_popup.prepare_show(current_row, current_col, self.detail_table)
             
             # 실행 (재사용)
             self.reference_popup.exec()

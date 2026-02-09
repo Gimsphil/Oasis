@@ -1,0 +1,5 @@
+Starting debug run... 
+Python Path: C:\Users\KIMPHIL\AppData\Local\Programs\Python\Python314\python.exe 
+--- Running main.py --- 
+Exit Code: 0 
+Debug run finished. 

@@ -115,19 +115,23 @@ class ReferenceTableModel(QAbstractTableModel):
             new_val = str(value).strip()
             existing_val = self._qty_inputs.get(row, "").strip()
             
-            # [NEW] 자동 누적 입력 로직
-            # 기존 값이 있고, 새로운 값도 입력되었으며, 기존 값과 새로운 값이 다를 경우
-            # (단, 새로운 값이 이미 기존 값을 포함하는 수식 형태로 들어온 경우는 제외)
-            if existing_val and new_val and existing_val != new_val:
-                # 숫자 또는 사칙연산 기호로 시작하는 경우에만 '+' 자동 누적
-                # (특수 명령 '===' 등은 누적에서 제외)
-                import re
-                if re.match(r'^[0-9.]', new_val) and not new_val.startswith(existing_val):
-                    # 기존 값이 수식인 경우 괄호 처리 고려 가능하나, 
-                    # 사용자 요청에 따라 단순하게 '+'로 연결
-                    new_val = f"{existing_val}+{new_val}"
-            
-            self._qty_inputs[row] = new_val
+            if new_val:
+                # [NEW] 자동 누적 입력 로직
+                # 기존 값이 있고, 새로운 값도 입력되었으며, 기존 값과 새로운 값이 다를 경우
+                # (단, 새로운 값이 이미 기존 값을 포함하는 수식 형태로 들어온 경우는 제외)
+                if existing_val and existing_val != new_val:
+                    # 숫자 또는 사칙연산 기호로 시작하는 경우에만 '+' 자동 누적
+                    # (특수 명령 '===' 등은 누적에서 제외)
+                    import re
+                    if re.match(r'^[0-9.]', new_val) and not new_val.startswith(existing_val):
+                        # 기존 값이 수식인 경우 괄호 처리 고려 가능하나, 
+                        # 사용자 요청에 따라 단순하게 '+'로 연결
+                        new_val = f"{existing_val}+{new_val}"
+                self._qty_inputs[row] = new_val
+            else:
+                # 입력이 비어있으면 딕셔너리에서 제거 (사용자 의도: 입력 취소)
+                if row in self._qty_inputs:
+                    del self._qty_inputs[row]
             self.dataChanged.emit(index, index, [role])
             return True
         return False
@@ -178,6 +182,7 @@ class DatabaseReferencePopup(QDialog):
         self.parent_popup = parent_popup
         self.current_row = -1
         self.current_col = -1
+        self.target_table = None # [NEW] 데이터를 보낼 대상 테이블 객체 직접 저장
         
         # 경로 및 설정
         self.original_mapping_path = r"D:\오아시스\data\manual_mapping.json"
@@ -209,12 +214,16 @@ class DatabaseReferencePopup(QDialog):
         """부모가 가진 DB 경로를 우선 참조, 없으면 기본값 사용"""
         return getattr(self.parent_popup, 'ref_db_path', r"D:\오아시스\data\자료사전.db")
 
-    def prepare_show(self, current_row, current_col):
+    def prepare_show(self, current_row, current_col, target_table=None):
         """창을 표시하기 전에 필요한 정보를 갱신 (Parent와 동기화)"""
         self.current_row = current_row
         self.current_col = current_col
+        # [NEW] 호출 시점에 대상 테이블을 명시적으로 전달받음
+        self.target_table = target_table or (getattr(self.parent_popup, "eulji_table", None))
         
-        # 상단 리스트 갱신 (현재 행 기준으로 자동 선택) - 세부산출 모드에서만 수행
+        # [NEW] 호출 시마다 이전 입력 데이터 초기화 (사용자 요청: 탐색만 한 항목이 전달되는 것 방지)
+        if self.model:
+            self.model.clear_all_qty()
         if not self.is_main_sheet:
             self._populate_product_list(target_row=current_row)
         else:
@@ -588,25 +597,39 @@ class DatabaseReferencePopup(QDialog):
                 self.hide()
                 return
             
-            sent_count = 0  # [FIX] 초기화 누락 수정
-            # [NEW] 부모 타입에 따른 처리
-            if hasattr(self.parent_popup, "detail_table"):
+            # [NEW] 현재 편집 중인 셀의 데이터를 강제로 확정(Focus 이동 및 commitData 유도)
+            self.reference_table.setFocus()
+            
+            sent_count = 0 
+            print(f"[DEBUG] _send_all_and_close: TargetTable={self.target_table}")
+            
+            if not self.model._qty_inputs:
+                print("[DEBUG] No quantity inputs found.")
+                # 입력된 수량이 없으면 알림 후 종료 (사용자 실수 방지)
+                # self.accept() # 이 부분은 사용자 경험에 따라 다를 수 있으나, 일단 그냥 닫음
+                pass
+
+            # [STABILIZED] 호출 타입별 독립적 분리 처리 (상호 간섭 배제)
+            
+            # (A) 전등수량/갯수산출 (LightingPowerPopup)
+            # parent_popup의 속성으로 판별하되, target_table이 detail_table인 경우 우선 처리
+            is_lighting = self.is_lighting_calc or (self.target_table and hasattr(self.parent_popup, 'detail_table') and self.target_table == self.parent_popup.detail_table)
+            
+            if is_lighting:
+                print("[DEBUG] Target: Lighting Calculation")
                 detail_table = self.parent_popup.detail_table
+                active_row = self.current_row
                 
-                # 입력된 모든 수량 데이터 처리
-                for row, qty_text in list(self.model._qty_inputs.items()):
-                    qty_text = qty_text.strip()
-                    if not qty_text or not self._is_numeric(qty_text):
-                        continue
+                for row in sorted(self.model._qty_inputs.keys()):
+                    qty_text = self.model._qty_inputs[row].strip()
+                    if not qty_text or not self._is_numeric(qty_text): continue
                     
                     try:
                         raw_row = self.model._raw_data[row]
+                        # 화면 표시 로직과 동일하게 명칭 추출
                         output_name = str(raw_row[13]) if (len(raw_row) > 13 and raw_row[13]) else str(raw_row[1])
-                        code = str(raw_row[4])
+                        target_row = active_row
                         
-                        target_row = self.current_row + sent_count
-                        
-                        # 기존 행이 채워져 있으면 아래에 삽입
                         if detail_table.item(target_row, 2) and detail_table.item(target_row, 2).text().strip():
                             detail_table.insertRow(target_row + 1)
                             target_row += 1
@@ -614,92 +637,125 @@ class DatabaseReferencePopup(QDialog):
                         detail_table.blockSignals(True)
                         detail_table.setItem(target_row, 2, QTableWidgetItem(output_name))
                         detail_table.setItem(target_row, 3, QTableWidgetItem(qty_text))
-                        # detail_table.setItem(target_row, 1, QTableWidgetItem(code)) # [FIX] 구분 컬럼 입력 중단
                         detail_table.blockSignals(False)
+                        
+                        active_row = target_row + 1
                         sent_count += 1
                     except Exception as e:
-                        print(f"[WARN] Row {row} send failed: {e}")
+                        print(f"[WARN] Lighting calc send failed: {e}")
 
-            elif hasattr(self.parent_popup, "eulji_table"):
-                eulji_table = self.parent_popup.eulji_table
-                e_cols = self.parent_popup.EULJI_COLS
+            # (B) 산출일위표 팝업 (CalculationUnitPricePopup)
+            elif self.is_unit_price_popup or (self.target_table and hasattr(self.parent_popup, 'table') and self.target_table == self.parent_popup.table):
+                print("[DEBUG] Target: Unit Price Popup")
+                target_table = self.parent_popup.table
+                u_cols = self.parent_popup.UNIT_PRICE_COLS
+                active_row = self.current_row
                 
-                # 입력된 모든 수량 데이터 처리
-                for row, qty_text in list(self.model._qty_inputs.items()):
-                    qty_text = qty_text.strip()
-                    if not qty_text or not self._is_numeric(qty_text):
-                        continue
+                for row in sorted(self.model._qty_inputs.keys()):
+                    qty_text = self.model._qty_inputs[row].strip()
+                    if not qty_text or not self._is_numeric(qty_text): continue
                     
                     try:
                         raw_row = self.model._raw_data[row]
                         output_name = str(raw_row[13]) if (len(raw_row) > 13 and raw_row[13]) else str(raw_row[1])
-                        code = str(raw_row[4])
+                        spec = str(raw_row[2]) if raw_row[2] else ""
                         unit = str(raw_row[3])
                         
-                        target_row = self.current_row + sent_count
-                        
-                        # 기존 행이 채워져 있으면 아래에 삽입
-                        if eulji_table.item(target_row, e_cols["ITEM"]) and eulji_table.item(target_row, e_cols["ITEM"]).text().strip():
-                            eulji_table.insertRow(target_row + 1)
-                            target_row += 1
-                        
-                        eulji_table.blockSignals(True)
-                        eulji_table.setItem(target_row, e_cols["ITEM"], QTableWidgetItem(output_name))
-                        eulji_table.setItem(target_row, e_cols["FORMULA"], QTableWidgetItem(qty_text))
-                        eulji_table.setItem(target_row, e_cols["UNIT"], QTableWidgetItem(unit))
-                        # eulji_table.setItem(target_row, e_cols["GUBUN"], QTableWidgetItem(code)) # [FIX] 구분 컬럼 입력 중단
-                        eulji_table.blockSignals(False)
-                        
-                        # [NEW] 강제 계산 트리거 (시그널 차단 중 입력되었으므로 수동 호출)
-                        if hasattr(self.parent_popup, "on_eulji_cell_changed"):
-                            self.parent_popup.on_eulji_cell_changed(target_row, e_cols["FORMULA"])
-                        
-                        sent_count += 1
-                    except Exception as e:
-                        print(f"[WARN] Row {row} send failed: {e}")
-
-            elif hasattr(self.parent_popup, "table") and hasattr(self.parent_popup, "UNIT_PRICE_COLS"):
-                # [NEW] 산출일위표 팝업(CalculationUnitPricePopup) 대응
-                target_table = self.parent_popup.table
-                u_cols = self.parent_popup.UNIT_PRICE_COLS
-                
-                for row, qty_text in list(self.model._qty_inputs.items()):
-                    qty_text = qty_text.strip()
-                    try:
-                        raw_row = self.model._raw_data[row]
-                        output_name = str(raw_row[13]) if (len(raw_row) > 13 and raw_row[13]) else str(raw_row[1])
-                        spec = str(raw_row[2]) if raw_row[2] else ""
-                        code = str(raw_row[4])
-                        
-                        target_row = self.current_row + sent_count
+                        target_row = active_row
                         if target_row >= target_table.rowCount():
                             target_table.insertRow(target_row)
                         
                         target_table.blockSignals(True)
-                        # [FIX] '#' 컬럼에 'i' 마커(일위대가) 표시 및 짙은 청색(#000080) 설정
                         mark_item = QTableWidgetItem("i")
                         mark_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                         mark_item.setForeground(QColor("#000080"))
-                        
-                        # 폰트 굵게 처리
                         font = mark_item.font()
                         font.setBold(True)
                         mark_item.setFont(font)
                         
                         target_table.setItem(target_row, u_cols["MARK"], mark_item)
-                        
                         target_table.setItem(target_row, u_cols["LIST"], QTableWidgetItem(output_name))
+                        # SPEC 컬럼 위치가 유동적일 수 있으므로 안전하게 처리
+                        spec_col = u_cols.get("SPEC", 2) 
+                        target_table.setItem(target_row, spec_col, QTableWidgetItem(spec))
                         
-                        if qty_text and self._is_numeric(qty_text):
-                            target_table.setItem(target_row, u_cols["UNIT_QTY"], QTableWidgetItem(qty_text))
+                        unit_col = u_cols.get("UNIT", 3)
+                        target_table.setItem(target_row, unit_col, QTableWidgetItem(unit))
+                        
+                        qty_col = u_cols.get("UNIT_QTY", 4)
+                        target_table.setItem(target_row, qty_col, QTableWidgetItem(qty_text))
                         target_table.blockSignals(False)
                         
                         if hasattr(self.parent_popup, "_on_unit_price_cell_changed"):
-                            self.parent_popup._on_unit_price_cell_changed(target_row, u_cols["UNIT_QTY"])
-                            
+                            self.parent_popup._on_unit_price_cell_changed(target_row, qty_col)
+                        
+                        active_row = target_row + 1
                         sent_count += 1
                     except Exception as e:
-                        print(f"[WARN] CalculationUnitPricePopup send failed: {e}")
+                        print(f"[WARN] UnitPricePopup send failed: {e}")
+
+            # (C) 메인 상세산출 탭 (OutputDetailTab)
+            elif self.is_main_sheet or (self.target_table and hasattr(self.parent_popup, 'eulji_table') and self.target_table == self.parent_popup.eulji_table):
+                print("[DEBUG] Target: Main Sheet (Eulji)")
+                eulji_table = self.parent_popup.eulji_table
+                e_cols = self.parent_popup.EULJI_COLS
+
+                # [STABILIZED] 행 추적 로직 (연속 입력 시 덮어쓰기 방지)
+                active_row = self.current_row
+
+                # [FIX] 전체 삽입 과정을 blockSignals로 감싸서
+                # selectionChanged → unit_price_trigger 간섭 방지
+                eulji_table.blockSignals(True)
+
+                # 삽입할 데이터를 먼저 수집
+                items_to_insert = []
+                for row in sorted(self.model._qty_inputs.keys()):
+                    qty_text = self.model._qty_inputs[row].strip()
+                    if not qty_text or not self._is_numeric(qty_text): continue
+
+                    try:
+                        raw_row = self.model._raw_data[row]
+                        # [FIX] 산출목록(13) 우선 사용, 없으면 품명(1)
+                        item_name = str(raw_row[13]) if (len(raw_row) > 13 and raw_row[13]) else str(raw_row[1])
+                        # 규격(2) 추가 결합 (산출목록 컬럼에 '명칭+규격'으로 입력)
+                        spec_name = str(raw_row[2]) if (len(raw_row) > 2 and raw_row[2]) else ""
+                        output_name = f"{item_name} {spec_name}".strip()
+                        unit = str(raw_row[3]) if (len(raw_row) > 3 and raw_row[3]) else ""
+                        items_to_insert.append((output_name, qty_text, unit))
+                    except Exception as e:
+                        print(f"[WARN] MainSheet data extract failed: {e}")
+
+                # 순차적으로 삽입 (blockSignals 상태에서)
+                inserted_rows = []  # 실제 삽입된 행 번호 추적
+                for output_name, qty_text, unit in items_to_insert:
+                    try:
+                        target_row = active_row
+                        # [FIX] item()이 None일 수 있으므로 안전하게 체크 후 행 삽입 결정
+                        existing_item = eulji_table.item(target_row, e_cols["ITEM"])
+                        if existing_item and existing_item.text().strip():
+                            eulji_table.insertRow(target_row + 1)
+                            target_row += 1
+
+                        eulji_table.setItem(target_row, e_cols["ITEM"], QTableWidgetItem(output_name))
+                        eulji_table.setItem(target_row, e_cols["FORMULA"], QTableWidgetItem(qty_text))
+                        eulji_table.setItem(target_row, e_cols["UNIT"], QTableWidgetItem(unit))
+
+                        inserted_rows.append(target_row)  # 실제 삽입된 행 번호 기록
+                        # 다음 항목을 위한 행 포인터 이동
+                        active_row = target_row + 1
+                        sent_count += 1
+                    except Exception as e:
+                        print(f"[WARN] MainSheet send failed: {e}")
+
+                eulji_table.blockSignals(False)
+
+                # [FIX] 삽입 완료 후 일괄적으로 계산 갱신 (실제 삽입된 행 번호 기반)
+                if sent_count > 0 and hasattr(self.parent_popup, "on_eulji_cell_changed"):
+                    for calc_row in inserted_rows:
+                        try:
+                            self.parent_popup.on_eulji_cell_changed(calc_row, e_cols["FORMULA"])
+                        except Exception:
+                            pass
 
             # 후속 처리
             if sent_count > 0:
@@ -714,12 +770,17 @@ class DatabaseReferencePopup(QDialog):
                     self.parent_popup._save_eulji_data(self.parent_popup.current_gongjong)
                     
                 print(f"[INFO] ESC: {sent_count}개 항목 전송 완료")
+            else:
+                if self.model._qty_inputs:
+                     QMessageBox.information(self, "알림", "전송할 유효한 데이터가 없습니다.\n수량을 숫자로 입력했는지 확인해주세요.")
             
             # [FIX] hide() 대신 accept()를 호출하여 exec() 결과가 True가 되도록 함
             self.accept()
             
         except Exception as e:
-            print(f"[ERROR] Send all failed: {e}")
+            import traceback
+            print(f"[ERROR] Send all failed: {e}\n{traceback.format_exc()}")
+            QMessageBox.critical(self, "오류", f"데이터 전송 중 오류가 발생했습니다: {e}")
             self.reject()
 
     def _on_send_clicked(self):

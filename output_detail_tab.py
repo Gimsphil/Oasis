@@ -112,7 +112,7 @@ class OutputDetailTab:
         "단위",
         "비고",
     ]
-    EULJI_COL_WIDTHS = [28, 84, 60, 60, 72, 400, 420, 50, 50, 75]
+    EULJI_COL_WIDTHS = [28, 84, 60, 60, 72, 400, 432, 50, 50, 75]
 
     GONGJONG_FILENAME = "공종명입력.txt"
 
@@ -953,13 +953,27 @@ class OutputDetailTab:
                 from popups.database_reference_popup import DatabaseReferencePopup
                 self.reference_popup = DatabaseReferencePopup(self) # parent_popup으로 self 전달
             
-            # 2. 테이블 포커스/셀 설정
+            # 2. 테이블 포커스/셀 설정 및 대상 테이블 감지
+            target_table = None
             if hasattr(self, "eulji_table"):
-                self.eulji_table.setFocus()
+                if self.eulji_table.hasFocus() or self.eulji_table.viewport().hasFocus():
+                    target_table = self.eulji_table
                 self.eulji_table.setCurrentCell(row, col)
             
-            # 3. 팝업 표시
-            self.reference_popup.prepare_show(row, col)
+            from PyQt6.QtWidgets import QApplication
+            focus_w = QApplication.focusWidget()
+            if not target_table and focus_w:
+                # 포커스된 위젯이 테이블이거나 테이블의 자식인 경우 탐색
+                from PyQt6.QtWidgets import QTableWidget
+                curr = focus_w
+                while curr:
+                    if isinstance(curr, QTableWidget):
+                        target_table = curr
+                        break
+                    curr = curr.parent()
+            
+            # 3. 팝업 표시 (대상 테이블 명시적 전달)
+            self.reference_popup.prepare_show(row, col, target_table)
             self.reference_popup.exec()
             
         except Exception as e:

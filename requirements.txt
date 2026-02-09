@@ -1,4 +1,4 @@
-# 산출내역 독립 실행 프로그램 의존성
+# 전기 견적,수량산출 시스템 의존성
 # 설치 명령: pip install -r requirements.txt
 
 # GUI 프레임워크

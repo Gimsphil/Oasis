@@ -32,7 +32,7 @@ except:
 
 DEFAULT_ROWS = 500  # 기본 행 수 (엑셀 스타일 무한 그리드)
 DEFAULT_ROW_HEIGHT = 18  # 24 -> 18 (상하 1px 여백 최적화)
-UNIT_PRICE_ROW_HEIGHT = 18  # 24 -> 18
+UNIT_PRICE_ROW_HEIGHT = 22  # 산출일위표 전용 (헤더와 조화되는 높이)
 DEFAULT_FONT_SIZE = 11
 HEADER_FONT_SIZE = 11
 
@@ -110,7 +110,7 @@ EULJI_COLUMN_WIDTHS = {
     "TO": 60,
     "회로": 72,
     "산출목록": 400, # 800 -> 400 (50자 이내 텍스트 기준, 1/2 축소 요청 반영)
-    "산출수식": 420,
+    "산출수식": 432,
     "계": 50,
     "단위": 50,
     "비고": 75,
@@ -227,8 +227,7 @@ def setup_common_table(table: QTableWidget, columns: list = None, widths: dict =
     header.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
     # 일위대가 테이블 여부에 따라 높이 조절
     is_unit_price = False
-    if columns and ("자재목록" in columns or "품목" in columns):
-        # 품목/자재목록이 포함된 소형 테이블(일위대가 등)은 더 작게
+    if columns and ("자재목록" in columns or "품목" in columns or "산출일위목록" in columns):
         is_unit_price = True
 
     height = UNIT_PRICE_ROW_HEIGHT if is_unit_price else DEFAULT_ROW_HEIGHT
