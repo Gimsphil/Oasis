@@ -311,6 +311,9 @@ class OutputDetailTab:
         for menu_name in ["파일(F)", "편집(E)", "보기(V)", "도구(T)", "도움말(H)"]:
             btn = QPushButton(menu_name)
             btn.setStyleSheet(menu_btn_style)
+            # [NEW] 도움말 버튼 연결
+            if "도움말" in menu_name:
+                btn.clicked.connect(self._show_about_dialog)
             menu_layout.addWidget(btn)
         
         menu_layout.addStretch()
@@ -399,25 +402,38 @@ class OutputDetailTab:
 
         # --- [갑지 화면] ---
         self.gapji_widget = QWidget()
-        gapji_layout = QHBoxLayout(self.gapji_widget)
+        gapji_layout = QVBoxLayout(self.gapji_widget) # 메인 레이아웃은 VBox로 변경
         gapji_layout.setContentsMargins(0, 0, 0, 0)
         gapji_layout.setSpacing(0)
 
-        # 좌측: 공종 등록 패널 (카테고리 선택 및 공종 입력)
-        # 폰트 설정
-        self.gapji_widget.setStyleSheet("font-family: '새굴림';")
-        self._create_gongjong_panel(gapji_layout)
+        # [NEW] 갑지용 스플리터 도입 (경계 구분 명확화 및 리사이징 지원)
+        self.gapji_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.gapji_splitter.setHandleWidth(8) # 핸들 폭 확대 (사용자 요청)
+        self.gapji_splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #dee2e6;
+                border: 1px solid #ced4da;
+            }
+            QSplitter::handle:hover {
+                background-color: #adb5bd;
+            }
+        """)
 
         # 중앙: 갑지 테이블
         self.gapji_table = GapjiTableWidget(self)
         # 2행 공종순서 칸에 '번호정리' 버튼 배치 (사용자 요청)
         self.gapji_table.set_reorder_button(1, self.GONGJONG_NUM_COL, self._create_reorder_button())
-        gapji_layout.addWidget(self.gapji_table)
+        self.gapji_splitter.addWidget(self.gapji_table)
 
-        # 우측: 공종 리스트 패널 (사용자 요청으로 복원 및 동적 로딩 구현)
+        # 우측: 공종 리스트 패널
         self.side_panel_widget = GongjongListPanel(self)
         self.gongjong_list = self.side_panel_widget.list_widget # 하위 호환성 유지
-        gapji_layout.addWidget(self.side_panel_widget)
+        self.gapji_splitter.addWidget(self.side_panel_widget)
+        
+        # 초기 비율 설정 (전체 창 크기에 맞게 8:2 배분)
+        self.gapji_splitter.setSizes([1150, 250])
+        
+        gapji_layout.addWidget(self.gapji_splitter)
 
         self.stacked_widget.addWidget(self.gapji_widget)
 
@@ -429,10 +445,16 @@ class OutputDetailTab:
 
         # 스플리터
         self.eulji_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.eulji_splitter.setHandleWidth(1)
-        self.eulji_splitter.setStyleSheet(
-            "QSplitter::handle { background-color: #dee2e6; }"
-        )
+        self.eulji_splitter.setHandleWidth(8) # 핸들 폭 확대 (Gapji와 통일)
+        self.eulji_splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #dee2e6;
+                border: 1px solid #ced4da;
+            }
+            QSplitter::handle:hover {
+                background-color: #adb5bd;
+            }
+        """)
 
         # 을지 테이블 - Tab 키로 자료사전 팝업 호출을 위해 커스텀 위젯 사용
         self.eulji_table = EuljiTableWidget(self)
@@ -501,6 +523,15 @@ class OutputDetailTab:
         print("[DEBUG] Lighting/Power button clicked")
         if hasattr(self, 'lighting_manager'):
             self.lighting_manager.toggle_panel()
+
+    def _on_eulji_category_clicked(self, category):
+        """을지 상단 카테고리 버튼 클릭 핸들러"""
+        print(f"[DEBUG] Eulji category clicked: {category}")
+        if category == "전등/전열":
+            self._on_lighting_power_clicked()
+        else:
+            # 다른 카테고리에 대한 공종 리스트 로드 (필요시 구현)
+            self._load_gongjong_list_from_file(category)
 
     def _create_gongjong_panel(self, parent_layout):
         """공종 패널 생성 (삭제됨)"""
@@ -1225,6 +1256,84 @@ class OutputDetailTab:
     def _update_project_name(self, name):
         """프로젝트명 업데이트"""
         self.lbl_project_name.setText(f"Project: {name}")
+
+    def _show_about_dialog(self):
+        """[NEW] 도움말 - 프로그램 정보 표시"""
+        from PyQt6.QtGui import QPixmap, QIcon
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QHBoxLayout, QPushButton
+        
+        dlg = QDialog(self.main_window)
+        dlg.setWindowTitle("프로그램 정보 (About)")
+        dlg.setFixedSize(400, 320)
+        dlg.setStyleSheet("background-color: white; font-family: '새굴림';")
+        
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(30, 20, 30, 20)
+        layout.setSpacing(15)
+        
+        # 1. 아이콘 & 제목
+        header_layout = QHBoxLayout()
+        icon_label = QLabel()
+        # [수정] 사용자 지정 로고 경로 적용
+        icon_path = r"D:\오아시스\SANCHUL_Sheet_1\assets\icons\오아시스_로고01.png"
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path).scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            icon_label.setPixmap(pixmap)
+        header_layout.addWidget(icon_label)
+        
+        title_layout = QVBoxLayout()
+        title_label = QLabel("오아시스 (OASIS)")
+        title_label.setStyleSheet("font-size: 16pt; font-weight: bold; color: #004080;")
+        ver_label = QLabel("Version 1.1.0")
+        ver_label.setStyleSheet("font-size: 10pt; color: #666;")
+        title_layout.addWidget(title_label)
+        title_layout.addWidget(ver_label)
+        header_layout.addLayout(title_layout)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+        
+        # 구분선
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        line.setStyleSheet("background-color: #dee2e6;")
+        layout.addWidget(line)
+        
+        # 2. 상세 정보 (사용자 요청 정보로 수정)
+        info_text = """
+        <table style='width: 100%; font-size: 11pt; color: #333;'>
+            <tr><td style='width: 80px;'><b>개발</b></td><td>전기견적.산출 자동화 시스템</td></tr>
+            <tr><td><b>개발자</b></td><td>KIM PHIL JUNG</td></tr>
+            <tr><td><b>H/P</b></td><td>+62 812-8094-3179</td></tr>
+            <tr><td><b>연락처</b></td><td>kacang@nate.com</td></tr>
+        </table>
+        """
+        info_label = QLabel(info_text)
+        info_label.setStyleSheet("font-family: '새굴림';")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        layout.addStretch()
+        
+        # 3. 닫기 버튼
+        close_btn = QPushButton("확인")
+        close_btn.setFixedSize(80, 30)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8f9fa;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+            }
+            QPushButton:hover { background-color: #e9ecef; }
+        """)
+        close_btn.clicked.connect(dlg.accept)
+        
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+        
+        dlg.exec()
 
 
 # 테스트용 진입점

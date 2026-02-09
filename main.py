@@ -110,8 +110,9 @@ def main():
         else:
             print(f"[WARN] Icon file not found: {icon_path}")
 
-        window.resize(1200, 800)
-        window.move(100, 100)  # 화면 일정 위치에 배치
+        window.resize(1500, 920)
+        window.setMinimumSize(1200, 800)
+        window.move(50, 50)  # 화면 좌상단 근처에 배치
         print(f"[OK] Window created")
         
         # 탭 매니저 설정

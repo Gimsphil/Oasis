@@ -52,8 +52,13 @@ class EuljiCategoryMenu(QWidget):
         for cat in eulji_categories:
             btn = QPushButton(cat)
             btn.setStyleSheet(style)
-            # 버튼 클릭 이벤트가 필요한 경우 여기에 연결 가능 (현재는 단순 디자인용으로 보임)
-            # btn.clicked.connect(...)
+            # [FIX] 버튼 클릭 이벤트 연결
+            btn.clicked.connect(lambda checked, c=cat: self._on_button_clicked(c))
             layout.addWidget(btn)
         
         layout.addStretch()
+
+    def _on_button_clicked(self, category):
+        """버튼 클릭 시 부모 탭에 알림"""
+        if self.parent_tab and hasattr(self.parent_tab, "_on_eulji_category_clicked"):
+            self.parent_tab._on_eulji_category_clicked(category)

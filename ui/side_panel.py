@@ -11,8 +11,8 @@ class GongjongListPanel(QFrame):
         self._init_ui()
 
     def _init_ui(self):
-        self.setFixedWidth(250)
-        self.setStyleSheet("background-color: #f8f9fa; border-left: 1px solid #dee2e6;")
+        self.setMinimumWidth(200)
+        self.setStyleSheet("background-color: #f8f9fa;")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)

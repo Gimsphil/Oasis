@@ -267,9 +267,9 @@ def setup_common_table(table: QTableWidget, columns: list = None, widths: dict =
         }}
     """)
 
-    # 헤더 행 높이는 글자 크기에 맞춰 충분히 확보 (22px)
+    # 헤더 행 높이는 글자 크기에 맞춰 충분히 확보 (30px)
     h_header = table.horizontalHeader()
-    h_header.setFixedHeight(22)
+    h_header.setFixedHeight(30)
     # 가로 헤더 폰트 설정 (헤더는 굴림 적용)
     h_font = QFont("굴림", HEADER_FONT_SIZE)
     h_font.setStretch(100)

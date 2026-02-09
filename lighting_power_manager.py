@@ -1159,9 +1159,16 @@ class LightingPowerPopup(QDialog):
                 
                 # [산출목록 -> 산출일위 이동] (좌측 패널 어느 컬럼에서든 즉시 이동)
                 if is_on_master:
+                    # 에디터가 열려있는 경우 커밋
+                    if self.master_table.state() == QTableWidget.State.EditingState:
+                        self.master_table.setCurrentCell(self.master_table.currentRow(), self.master_table.currentColumn())
+                    
+                    target_row = self.detail_table.currentRow()
+                    if target_row < 0: target_row = 0
+                    
+                    # [FIX] CODE 컬럼(Index 1)으로 커서 즉시 이동
+                    self.detail_table.setCurrentCell(target_row, 1)
                     self.detail_table.setFocus()
-                    if self.detail_table.currentRow() < 0:
-                        self.detail_table.setCurrentCell(0, 2)
                     return True
                 
                 # [산출일위 -> 자료사전 호출] (우측 패널 '산출목록' 칸에서 팝업 열기)
@@ -1800,6 +1807,14 @@ class LightingPowerManager:
         else:
             self._load_list_data()
             self.panel.show()
+            # [FIX] 스플리터 크기 강제 설정 (표시 시 시야 확보)
+            if hasattr(self.parent_tab, 'eulji_splitter'):
+                # 전체 너비를 고려하여 8:2 비율 또는 고정 크기 배분
+                total_w = self.parent_tab.eulji_splitter.width()
+                if total_w > 300:
+                    self.parent_tab.eulji_splitter.setSizes([total_w - 250, 250])
+                else:
+                    self.parent_tab.eulji_splitter.setSizes([800, 250])
 
     def _load_list_data(self):
         """파일에서 리스트 데이터 로드"""
