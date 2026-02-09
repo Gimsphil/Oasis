@@ -196,10 +196,26 @@ class OutputDetailTab:
         # 전등/전열 매니저 초기화 (create_tab 이전에 수행해야 패널 등록 가능)
         from lighting_power_manager import LightingPowerManager
         self.lighting_manager = LightingPowerManager(self)
+        
+        # [NEW] 미저장 데이터 초기화 (사용자 요청: 새로 프로그램을 시작하면 행당 데이터 초기화)
+        self._cleanup_unsaved_chunks()
 
         print(
             f"[DEBUG] OutputDetailTab Init. Path exists: {os.path.exists(self.gongjong_file_path)}"
         )
+
+    def _cleanup_unsaved_chunks(self):
+        """미저장(Unsaved) 세션의 일위표 데이터 초기화"""
+        try:
+            import shutil
+            root_path = os.path.dirname(os.path.abspath(__file__))
+            unsaved_dir = os.path.join(root_path, "data", "unit_price_chunks", "_unsaved_session_")
+            if os.path.exists(unsaved_dir):
+                print(f"[DEBUG] Cleaning up unsaved chunks: {unsaved_dir}")
+                shutil.rmtree(unsaved_dir)
+                os.makedirs(unsaved_dir, exist_ok=True)
+        except Exception as e:
+            print(f"[WARN] Failed to cleanup unsaved chunks: {e}")
 
     def reset_internal_data(self):
         """새로운 공종(시트) 로드 시 내부 데이터 초기화"""

@@ -76,14 +76,20 @@ class ReferenceTableModel(QAbstractTableModel):
             # 컬럼 매핑 (SQL 결과 순서 대응)
             # 0:ID, 1:품명, 2:규격, 3:단위, 4:CODE, ..., 11:약칭
             mapping = {
-                0: 0,  # 번호 (ID)
-                1: 1,  # 명칭(Description) (품명)
-                2: 2,  # 규격(Size) (규격)
-                3: 3   # 단위
+                0: 0,   # 번호 (ID)
+                1: 13,  # [FIX] 명칭(Description) 대신 산출목록(13) 표시
+                2: 2,   # 규격(Size)
+                3: 3    # 단위
             }
             raw_idx = mapping.get(col, -1)
             if raw_idx == -1:
                 return ""
+            
+            # [NEW] 산출목록(13)이 비어있는 경우 품명(1)으로 대체 출력
+            if col == 1:
+                val = self._raw_data[row][13] if (len(self._raw_data[row]) > 13 and self._raw_data[row][13]) else self._raw_data[row][1]
+                return str(val) if val is not None else ""
+                
             return str(self._raw_data[row][raw_idx]) if self._raw_data[row][raw_idx] is not None else ""
 
         # 텍스트 색상
@@ -670,9 +676,20 @@ class DatabaseReferencePopup(QDialog):
                             target_table.insertRow(target_row)
                         
                         target_table.blockSignals(True)
-                        name_and_spec = f"{output_name} {spec}".strip()
-                        target_table.setItem(target_row, u_cols["LIST"], QTableWidgetItem(name_and_spec))
-                        target_table.setItem(target_row, u_cols["ID"], QTableWidgetItem(code))
+                        # [FIX] '#' 컬럼에 'i' 마커(일위대가) 표시 및 짙은 청색(#000080) 설정
+                        mark_item = QTableWidgetItem("i")
+                        mark_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        mark_item.setForeground(QColor("#000080"))
+                        
+                        # 폰트 굵게 처리
+                        font = mark_item.font()
+                        font.setBold(True)
+                        mark_item.setFont(font)
+                        
+                        target_table.setItem(target_row, u_cols["MARK"], mark_item)
+                        
+                        target_table.setItem(target_row, u_cols["LIST"], QTableWidgetItem(output_name))
+                        
                         if qty_text and self._is_numeric(qty_text):
                             target_table.setItem(target_row, u_cols["UNIT_QTY"], QTableWidgetItem(qty_text))
                         target_table.blockSignals(False)

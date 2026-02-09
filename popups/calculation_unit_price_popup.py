@@ -12,8 +12,10 @@ from PyQt6.QtWidgets import (
 )
 import re
 import sys
+import os
+import json
 from datetime import datetime
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer, QPoint
 from PyQt6.QtGui import QFont, QColor, QKeyEvent
 
 from utils.column_settings import (
@@ -64,14 +66,21 @@ class CalculationUnitPricePopup(QDialog):
         from utils.column_settings import UNIT_PRICE_COLS
         self.UNIT_PRICE_COLS = UNIT_PRICE_COLS
         
-        # 절대 경로 로그 파일 설정
-        import os
-        self.debug_log = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "debug_trigger.log")
-        
         self._init_ui()
         
     def _init_ui(self):
         """UI 초기화"""
+        # [NEW] 자료사전 조각 파일 저장 경로 설정 (부모 탭 정보 활용 우선)
+        root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.debug_log = os.path.join(root_path, "debug_trigger.log")
+        self.base_chunk_dir = os.path.join(root_path, "data", "unit_price_chunks")
+        os.makedirs(self.base_chunk_dir, exist_ok=True)
+        
+        # [NEW] 지연 저장용 타이머
+        self.save_timer = QTimer()
+        self.save_timer.setSingleShot(True)
+        self.save_timer.timeout.connect(self._save_data)
+        
         self.setWindowTitle("산출일위표")
         self.setMinimumSize(600, 400)
         
@@ -168,6 +177,15 @@ class CalculationUnitPricePopup(QDialog):
         
         # [NEW] 셀 내용 변경 시 계산 연동
         self.table.cellChanged.connect(self._on_unit_price_cell_changed)
+        
+        # [NEW] 단위수량 컬럼 및 단위계 컬럼 델리게이트 조정 (숫자 형식)
+        from utils.column_settings import NumericDelegate, CenterAlignmentDelegate
+        num_delegate = NumericDelegate(self.table, [UNIT_PRICE_COLS["UNIT_QTY"], UNIT_PRICE_COLS["UNIT_TOTAL"]])
+        self.table.setItemDelegateForColumn(UNIT_PRICE_COLS["UNIT_QTY"], num_delegate)
+        self.table.setItemDelegateForColumn(UNIT_PRICE_COLS["UNIT_TOTAL"], num_delegate)
+        
+        # [NEW] 마커 컬럼은 중앙 정렬
+        self.table.setItemDelegateForColumn(UNIT_PRICE_COLS["MARK"], CenterAlignmentDelegate(self.table, [UNIT_PRICE_COLS["MARK"]]))
         
         # 이벤트 필터 설치 (키 바인딩용)
         self.table.installEventFilter(self)
@@ -322,19 +340,152 @@ class CalculationUnitPricePopup(QDialog):
                     f.write(error_msg + "\n")
             except: pass
 
+    def _get_chunk_file_path(self, item_name):
+        """항목명을 기반으로 안전한 파일 경로 생성 (프로젝트별 격리 저장)"""
+        # 1. 프로젝트명 확인
+        project_name = "-"
+        if hasattr(self, 'parent_tab') and hasattr(self.parent_tab, 'lbl_project_name'):
+            project_label = self.parent_tab.lbl_project_name.text()
+            if project_label.startswith("Project: "):
+                project_name = project_label.replace("Project: ", "").strip()
+        
+        if not project_name or project_name == "-":
+            project_name = "_unsaved_session_"
+            
+        # 2. 프로젝트 폴더 경로 생성
+        safe_p_name = re.sub(r'[\\/*?:"<>|]', "_", project_name).strip()
+        project_dir = os.path.join(self.base_chunk_dir, safe_p_name)
+        os.makedirs(project_dir, exist_ok=True)
+        
+        # 3. 항목 파일명 생성
+        if not item_name:
+            if self.target_row >= 0:
+                # 항목명이 없는 경우 행 번호를 이용해 임시 저장
+                item_name = f"unnamed_row_{self.target_row}"
+            else:
+                return None
+                
+        safe_name = re.sub(r'[\\/*?:"<>|]', "_", item_name).strip()
+        if not safe_name: return None
+        return os.path.join(project_dir, f"{safe_name}.json")
+
     def _load_data(self, item_name):
-        """자료사전 기반 데이터 로딩 (기본 30행 설정)"""
+        """저장된 조각 파일 로드 또는 기본 30행 초기화"""
         try:
             self.table.setRowCount(0)
-            # 사용자 요청에 따라 기본 30행 구성
-            for _ in range(30):
-                self.add_row()
+            orig_blocked = self.table.blockSignals(True)
+            
+            file_path = self._get_chunk_file_path(item_name)
+            loaded = False
+            
+            log_msg = f"[{datetime.now()}] _load_data for '{item_name}' (Path: {file_path})\n"
+            
+            if file_path and os.path.exists(file_path):
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    
+                    if isinstance(data, list):
+                        for row_data in data:
+                            row = self.table.rowCount()
+                            self.table.insertRow(row)
+                            self.table.setRowHeight(row, 18)
+                            
+                            # 데이터 채우기 (MARK, LIST, UNIT_QTY)
+                            mark_text = str(row_data.get("mark", ""))
+                            mark_item = QTableWidgetItem(mark_text)
+                            mark_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                            
+                            # [NEW] 'i'인 경우 짙은 청색 및 볼드 처리
+                            if mark_text == "i":
+                                mark_item.setForeground(QColor("#000080"))
+                                f = mark_item.font()
+                                f.setBold(True)
+                                mark_item.setFont(f)
+                            
+                            self.table.setItem(row, self.UNIT_PRICE_COLS["MARK"], mark_item)
+                            
+                            self.table.setItem(row, self.UNIT_PRICE_COLS["LIST"], QTableWidgetItem(str(row_data.get("list", ""))))
+                            self.table.setItem(row, self.UNIT_PRICE_COLS["UNIT_QTY"], QTableWidgetItem(str(row_data.get("qty", ""))))
+                            
+                            # 단위계 계산 (blockSignals 상태이므로 직접 호출)
+                            self._update_row_total(row)
+                        loaded = True
+                        log_msg += f"  -> Success: {len(data)} rows loaded.\n"
+                except Exception as e:
+                    log_msg += f"  -> Error: {e}\n"
+
+            # 로드 실패 시 또는 데이터가 없는 경우 기본 30행 구성
+            if not loaded:
+                for _ in range(30):
+                    self.add_row()
+                log_msg += "  -> No data found, initialized 30 blank rows.\n"
+            
+            self.table.blockSignals(orig_blocked)
             
             # 첫 번째 셀 선택
             if self.table.rowCount() > 0:
-                self.table.setCurrentCell(0, UNIT_PRICE_COLS["LIST"])
+                self.table.setCurrentCell(0, self.UNIT_PRICE_COLS["LIST"])
+            
+            # [LOG]
+            try:
+                with open(self.debug_log, "a", encoding="utf-8") as f:
+                    f.write(log_msg)
+            except: pass
+                
         except Exception as e:
+            self.table.blockSignals(False)
             print(f"[ERROR] _load_data failed: {e}")
+
+    def _save_data(self):
+        """현재 테이블 내용을 조각 파일로 저장"""
+        try:
+            item_name = self.lbl_item_name.text().replace("산출일위목록: ", "").strip()
+            if item_name == "-": item_name = ""
+            
+            file_path = self._get_chunk_file_path(item_name)
+            if not file_path: return
+            
+            data = []
+            has_valid_data = False
+            for r in range(self.table.rowCount()):
+                mark_item = self.table.item(r, self.UNIT_PRICE_COLS["MARK"])
+                list_item = self.table.item(r, self.UNIT_PRICE_COLS["LIST"])
+                qty_item = self.table.item(r, self.UNIT_PRICE_COLS["UNIT_QTY"])
+                
+                mark_text = mark_item.text().strip() if mark_item else ""
+                list_text = list_item.text().strip() if list_item else ""
+                qty_text = qty_item.text().strip() if qty_item else ""
+                
+                if mark_text or list_text or qty_text:
+                    data.append({
+                        "mark": mark_text,
+                        "list": list_text,
+                        "qty": qty_text
+                    })
+                    has_valid_data = True
+            
+            log_msg = f"[{datetime.now()}] _save_data for '{item_name}' (ValidData={has_valid_data}, Rows={len(data)})\n"
+            
+            if has_valid_data:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                log_msg += f"  -> Successfully saved to {file_path}\n"
+            else:
+                log_msg += "  -> No data to save.\n"
+                
+            # [LOG]
+            try:
+                with open(self.debug_log, "a", encoding="utf-8") as f:
+                    f.write(log_msg)
+            except: pass
+                
+        except Exception as e:
+            print(f"[ERROR] _save_data failed: {e}")
+            try:
+                with open(self.debug_log, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now()}] _save_data EXCEPTION: {e}\n")
+            except: pass
 
     def add_row(self):
         """테이블에 새 행 추가"""
@@ -347,61 +498,201 @@ class CalculationUnitPricePopup(QDialog):
         current_row = self.table.currentRow()
         if current_row >= 0:
             self.table.removeRow(current_row)
+            self._sync_to_parent()
+            self.save_timer.start(500) # 행 삭제 시 즉시 예약 저장
             
+    def _evaluate_math(self, expression):
+        """사칙연산 수식을 계산하여 결과를 반환"""
+        if not expression:
+            return 0.0
+        try:
+            # 전처리: 공백 제거, 특수 대괄호를 소괄호로, x 또는 X를 *로 변경
+            expr = str(expression).strip()
+            expr = expr.replace(' ', '')
+            expr = expr.replace('{', '(').replace('}', ')')
+            expr = expr.replace('[', '(').replace(']', ')')
+            expr = expr.replace('x', '*').replace('X', '*')
+            
+            # 사칙연산 및 숫자, 소괄호 외의 문자 차단
+            clean_expr = re.sub(r'[^0-9+\-*/().]', '', expr)
+            
+            if not clean_expr:
+                return 0.0
+                
+            # 계산 실행 (안전한 eval을 위해 전역/지역 변수 제한)
+            return float(eval(clean_expr, {"__builtins__": None}, {}))
+        except Exception:
+            return 0.0
+
     def _on_unit_price_cell_changed(self, row, col):
-        """셀 데이터 변경 시 처리 (필요시 계산 로직 추가)"""
-        # [DEBUG] 셀 변경 로그
-        print(f"[DEBUG] Unit Price Cell Changed: row={row}, col={col}")
-        pass
+        """셀 데이터 변경 시 처리 (단위수량 변경 시 해당 행의 단위계 계산 및 부모 동기화)"""
+        if col == self.UNIT_PRICE_COLS["UNIT_QTY"]:
+            self._update_row_total(row)
+        
+        # [NEW] 데이터 존재 여부에 따라 부모 탭(을지) 업데이트 (식, 1)
+        self._sync_to_parent()
+        
+        # [NEW] 데이터 변경 시 지연 저장 (500ms)
+        self.save_timer.start(500)
+            
+    def _update_row_total(self, row):
+        """특정 행의 단위수량 수식을 계산하여 단위계 컬럼에 출력"""
+        try:
+            qty_item = self.table.item(row, self.UNIT_PRICE_COLS["UNIT_QTY"])
+            if not qty_item:
+                return
+            
+            formula = qty_item.text().strip()
+            result = self._evaluate_math(formula)
+            
+            from utils.column_settings import format_number
+            
+            orig_blocked = self.table.blockSignals(True)
+            
+            total_item = self.table.item(row, self.UNIT_PRICE_COLS["UNIT_TOTAL"])
+            if not total_item:
+                total_item = QTableWidgetItem()
+                self.table.setItem(row, self.UNIT_PRICE_COLS["UNIT_TOTAL"], total_item)
+            
+            # 계산 결과가 0이 아니거나 수식이 있는 경우에만 표시 (또는 항상 표시)
+            total_item.setText(format_number(result) if result != 0 or formula else "")
+            total_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            
+            self.table.blockSignals(orig_blocked)
+            
+            # [DEBUG] 행별 합계 갱신 로그
+            print(f"[DEBUG] Row {row} Unit Total Updated: {result}")
+        except Exception as e:
+            print(f"[ERROR] _update_row_total failed for row {row}: {e}")
+
+    def _sync_to_parent(self):
+        """일위표 데이터 존재 여부에 따라 부모 테이블(을지)의 단위/수량 업데이트 ('식', '1')"""
+        try:
+            if not self.parent_tab or self.target_row < 0:
+                return
+                
+            # 데이터가 하나라도 있는지 확인 (산출일위목록 또는 단위수량이 있는 행)
+            has_data = False
+            for r in range(self.table.rowCount()):
+                list_item = self.table.item(r, self.UNIT_PRICE_COLS["LIST"])
+                qty_item = self.table.item(r, self.UNIT_PRICE_COLS["UNIT_QTY"])
+                if (list_item and list_item.text().strip()) or (qty_item and qty_item.text().strip()):
+                    has_data = True
+                    break
+            
+            if has_data:
+                # 부모 테이블(을지) 참조
+                e_cols = getattr(self.parent_tab, "EULJI_COLS", {})
+                if not e_cols: return
+                
+                e_table = getattr(self.parent_tab, "eulji_table", None)
+                if not e_table: return
+                
+                e_table.blockSignals(True)
+                
+                # 단위 (Index 8) -> "식"
+                unit_col = e_cols.get("UNIT", 8)
+                e_table.setItem(self.target_row, unit_col, QTableWidgetItem("식"))
+                
+                # 수량/수식 (Index 6) -> "1"
+                # [NOTE] 사용자가 직접 수량을 입력했더라도 일위표 데이터가 있으면 "1"로 강제함 (복합성 항목)
+                formula_col = e_cols.get("FORMULA", 6)
+                e_table.setItem(self.target_row, formula_col, QTableWidgetItem("1"))
+                
+                e_table.blockSignals(False)
+                
+                # 부모 테이블의 합계 및 상태 갱신 트리거
+                if hasattr(self.parent_tab, "on_eulji_cell_changed"):
+                    self.parent_tab.on_eulji_cell_changed(self.target_row, formula_col)
+                    
+                print(f"[DEBUG] Parent row {self.target_row} synced to '식, 1' due to unit price data.")
+        except Exception as e:
+            print(f"[ERROR] _sync_to_parent failed: {e}")
 
     def _adjust_position(self):
-        """부모 위젯의 위치에 따라 팝업 위치 조정"""
-        if self.parent_tab and hasattr(self.parent_tab, 'main_window'):
-            pw = self.parent_tab.main_window
-            # 메인 윈도우의 현재 위치와 크기
-            pw_rect = pw.geometry()
+        """부모(을지 테이블)의 산출목록 컬럼 우측에 팝업 배치"""
+        if self.parent_tab and hasattr(self.parent_tab, 'eulji_table'):
+            table = self.parent_tab.eulji_table
             
-            # 팝업을 메인 윈도우의 우측 내부에 배치 (여백 20px)
-            target_x = pw_rect.right() - self.width() - 20
-            target_y = pw_rect.top() + 100
+            # 1. 대상 컬럼(산출목록)의 위치 및 너비 정보 가져오기
+            col_x = table.columnViewportPosition(self.target_col)
+            col_w = table.columnWidth(self.target_col)
             
-            # 화면 밖으로 나가지 않도록 조정 (기초적인 수준)
+            # 2. 현재 선택된 행의 Y 좌표 가져오기
+            row_y = table.rowViewportPosition(self.target_row)
+            
+            # 3. 전역 좌표로 변환
+            # 산출목록 컬럼의 오른쪽 끝 지점을 시작점으로 잡음
+            top_left = table.viewport().mapToGlobal(QPoint(col_x + col_w, row_y))
+            
+            target_x = top_left.x() + 10  # 컬럼 끝에서 10px 여백
+            target_y = top_left.y()
+            
+            # 4. 화면 영역을 벗어나지 않도록 보정
+            from PyQt6.QtWidgets import QApplication
+            screen_rect = QApplication.primaryScreen().availableGeometry()
+            
+            # 가로 보정: 화면 오른쪽을 넘어가면 왼쪽으로 밀기
+            if target_x + self.width() > screen_rect.right():
+                target_x = screen_rect.right() - self.width() - 20
+                
+            # 세로 보정: 화면 아래를 넘어가면 위로 밀기
+            if target_y + self.height() > screen_rect.bottom():
+                target_y = screen_rect.bottom() - self.height() - 20
+            
+            # 최소 Y 좌표 보정
+            if target_y < screen_rect.top():
+                target_y = screen_rect.top() + 20
+                
             self.move(target_x, target_y)
+            print(f"[DEBUG] Popup moved to: ({target_x}, {target_y}) - to the right of column {self.target_col}")
 
     def prepare_show(self, parent_tab, row, col):
         """팝업 표시 전 데이터 및 위치 초기화"""
         try:
-            # [DEBUG] 로깅
-            with open("debug_trigger.log", "a", encoding="utf-8") as f:
-                f.write(f"[{datetime.now()}] CalculationUnitPricePopup.prepare_show: row={row}, col={col}\n")
-                f.flush()
+            # 1. 이전 항목 저장 상태 확인 (이전 행/열 정보 활용)
+            if hasattr(self, 'save_timer') and self.save_timer.isActive():
+                self.save_timer.stop()
+                self._save_data()
             
             self.parent_tab = parent_tab
+            this_old_row = self.target_row
+            this_old_col = self.target_col
             self.target_row = row
             self.target_col = col
-            
-            # 1. 대상 아이템명 가져오기
+
+            # 2. 대상 아이템명 가져오기
             item_name = ""
             if parent_tab and hasattr(parent_tab, 'eulji_table'):
                  item = parent_tab.eulji_table.item(row, col)
                  if item:
-                     item_name = item.text()
+                     item_name = item.text().strip()
             
-            # 2. UI 업데이트
-            self.lbl_item_name.setText(f"산출일위목록: {item_name}")
+            # [STABILIZED] 만약 행은 같은데 이름만 빈칸에서 이름이 생긴 경우라면?
+            # (이름을 나중에 입력하는 경우를 위해 기존 데이터 유실 방지)
+            prev_label = self.lbl_item_name.text().replace("산출일위목록: ", "").strip()
+            if prev_label == "-": prev_label = ""
             
-            # 3. 데이터 로드 (기존 데이터가 있으면 로드, 없으면 빈 폼)
+            if this_old_row == row and not prev_label and item_name:
+                print(f"[DEBUG] Row {row} now has a name: '{item_name}'. Syncing unnamed data.")
+                # 기존 데이터가 있으면 이름을 붙여서 저장
+                self.lbl_item_name.setText(f"산출일위목록: {item_name}")
+                self._save_data() 
+            
+            # 3. UI 업데이트 및 데이터 로드
+            self.lbl_item_name.setText(f"산출일위목록: {item_name if item_name else '-'}")
             self._load_data(item_name)
             
-            # [NEW] 로깅 강화
-            try:
-                with open(self.debug_log, "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now()}] prepare_show successful for item: {item_name}\n")
-            except: pass
-            
-            # 4. 위치 조정 (최초 1회 또는 강제)
+            # 4. 위치 조정
             if not self.is_manually_moved:
                 self._adjust_position()
+                
+            # [LOG]
+            try:
+                with open(self.debug_log, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now()}] prepare_show: row={row}, col={col}, item='{item_name}'\n")
+            except: pass
+            
         except Exception as e:
             import traceback
             with open("debug_popup_chain.log", "a", encoding="utf-8") as f:
@@ -445,8 +736,18 @@ class CalculationUnitPricePopup(QDialog):
             print(error_msg)
 
     def hide_popup(self):
-        """팝업 숨기기"""
+        """팝업 숨기기 및 데이터 세이프 가드"""
+        if self.save_timer.isActive():
+            self.save_timer.stop()
+            self._save_data()
         self.hide()
+
+    def hideEvent(self, event):
+        """팝업이 어떤 방식으로든 닫힐 때 데이터 저장"""
+        if hasattr(self, 'save_timer') and self.save_timer.isActive():
+            self.save_timer.stop()
+            self._save_data()
+        super().hideEvent(event)
 
 class UnitPriceDelegate(CleanStyleDelegate):
     """산출일위표 전용 델리게이트 - 잔상 제거(CleanStyle) 및 편집 중 Tab 키 가로채기 지원"""

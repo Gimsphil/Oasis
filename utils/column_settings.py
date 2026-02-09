@@ -118,17 +118,17 @@ EULJI_COLUMN_WIDTHS = {
 
 # [NEW] 산출일위표 컬럼 정의
 UNIT_PRICE_COLS = {
-    "ID": 0,
-    "LIST": 1,
-    "UNIT_QTY": 2,
-    "UNIT_TOTAL": 3,
+    "MARK": 0,    # "#." (상태 마커)
+    "LIST": 1,    # "산출일위목록"
+    "UNIT_QTY": 2, # "단위수량"
+    "UNIT_TOTAL": 3, # "단위계"
 }
-UNIT_PRICE_COL_NAMES = ["ID", "산출일위목록", "단위수량", "단위계"]
+UNIT_PRICE_COL_NAMES = ["#.", "산출일위목록", "단위수량", "단위계"]
 UNIT_PRICE_COL_WIDTHS = {
-    "ID": 60,
-    "산출일위목록": 300,
+    "MARK": 35,
+    "산출일위목록": 325, # ID 너비를 조금 흡수
     "단위수량": 100,
-    "단위계": 100,
+    "단위계": 75,
 }
 
 # 기초작업 을지 컬럼 (이미지 기반) - #. 및 대표목록 추가
