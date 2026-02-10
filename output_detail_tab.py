@@ -203,6 +203,7 @@ class OutputDetailTab:
         print(
             f"[DEBUG] OutputDetailTab Init. Path exists: {os.path.exists(self.gongjong_file_path)}"
         )
+        self._log_system_event("Application initialized with Unit Price Sync and Data Dict special commands.")
 
     def _cleanup_unsaved_chunks(self):
         """미저장(Unsaved) 세션의 일위표 데이터 초기화"""
@@ -308,11 +309,14 @@ class OutputDetailTab:
             }
         """
         
-        for menu_name in ["파일(F)", "편집(E)", "보기(V)", "도구(T)", "도움말(H)"]:
+        for menu_name, shortcut_key in [("파일(F)", "F"), ("편집(E)", "E"), ("보기(V)", "V"), ("도구(T)", "T"), ("시스템로그(L)", "L"), ("도움말(H)", "H")]:
             btn = QPushButton(menu_name)
             btn.setStyleSheet(menu_btn_style)
+            # [NEW] 시스템 로그 버튼 연결
+            if "시스템로그" in menu_name:
+                btn.clicked.connect(self._show_system_log)
             # [NEW] 도움말 버튼 연결
-            if "도움말" in menu_name:
+            elif "도움말" in menu_name:
                 btn.clicked.connect(self._show_about_dialog)
             menu_layout.addWidget(btn)
         
@@ -1348,6 +1352,27 @@ class OutputDetailTab:
         layout.addLayout(btn_layout)
         
         dlg.exec()
+
+    def _show_system_log(self):
+        """[NEW] 시스템 로그 및 메뉴얼 파일(SYSTEM_LOG.md) 열기"""
+        log_path = os.path.join(self.project_root, "SYSTEM_LOG.md")
+        if os.path.exists(log_path):
+            try:
+                # Windows 기본 텍스트 편집기(메모장 등)로 열기
+                os.startfile(log_path)
+            except Exception as e:
+                QMessageBox.warning(self.main_window, "오류", f"시스템 로그를 열 수 없습니다: {e}")
+        else:
+            QMessageBox.information(self.main_window, "알림", "시스템 로그 파일이 존재하지 않습니다.")
+
+    def _log_system_event(self, msg):
+        """시스템 이벤트를 디버그 로그에 기록 (나중에 SYSTEM_LOG.md 업데이트 참고용)"""
+        try:
+            log_file = os.path.join(self.project_root, "debug_trigger.log")
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now()}] [SYSTEM_EVENT] {msg}\n")
+        except:
+            pass
 
 
 # 테스트용 진입점

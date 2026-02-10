@@ -657,32 +657,39 @@ class DatabaseReferencePopup(QDialog):
                     
                     try:
                         raw_row = self.model._raw_data[row]
-                        output_name = str(raw_row[13]) if (len(raw_row) > 13 and raw_row[13]) else str(raw_row[1])
-                        spec = str(raw_row[2]) if raw_row[2] else ""
-                        unit = str(raw_row[3])
-                        
+                        # [FIX] 산출목록(13) 우선 사용 (이미 품명+규격 결합형)
+                        has_output = (len(raw_row) > 13 and raw_row[13] and str(raw_row[13]).strip())
+                        if has_output:
+                            output_name = str(raw_row[13]).strip()
+                        else:
+                            item_n = str(raw_row[1]) if raw_row[1] else ""
+                            spec_n = str(raw_row[2]) if (len(raw_row) > 2 and raw_row[2]) else ""
+                            output_name = f"{item_n} {spec_n}".strip() if spec_n else item_n.strip()
+
                         target_row = active_row
                         if target_row >= target_table.rowCount():
                             target_table.insertRow(target_row)
-                        
+
                         target_table.blockSignals(True)
-                        mark_item = QTableWidgetItem("i")
-                        mark_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                        mark_item.setForeground(QColor("#000080"))
-                        font = mark_item.font()
-                        font.setBold(True)
-                        mark_item.setFont(font)
                         
-                        target_table.setItem(target_row, u_cols["MARK"], mark_item)
+                        # [NEW] '일목' 그룹인 경우에만 'i' 마크 표시 (사용자 요청)
+                        group_val = str(raw_row[5]) if len(raw_row) > 5 else ""
+                        if group_val == "일목":
+                            mark_item = QTableWidgetItem("i")
+                            mark_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                            mark_item.setForeground(QColor("#000080"))
+                            font = mark_item.font()
+                            font.setBold(True)
+                            mark_item.setFont(font)
+                            target_table.setItem(target_row, u_cols["MARK"], mark_item)
+                        else:
+                            # '일목'이 아니면 마크 제거
+                            target_table.setItem(target_row, u_cols["MARK"], QTableWidgetItem(""))
+
                         target_table.setItem(target_row, u_cols["LIST"], QTableWidgetItem(output_name))
-                        # SPEC 컬럼 위치가 유동적일 수 있으므로 안전하게 처리
-                        spec_col = u_cols.get("SPEC", 2) 
-                        target_table.setItem(target_row, spec_col, QTableWidgetItem(spec))
-                        
-                        unit_col = u_cols.get("UNIT", 3)
-                        target_table.setItem(target_row, unit_col, QTableWidgetItem(unit))
-                        
-                        qty_col = u_cols.get("UNIT_QTY", 4)
+
+                        # 단위수량 컬럼에 수량 입력
+                        qty_col = u_cols.get("UNIT_QTY", 2)
                         target_table.setItem(target_row, qty_col, QTableWidgetItem(qty_text))
                         target_table.blockSignals(False)
                         
@@ -715,13 +722,22 @@ class DatabaseReferencePopup(QDialog):
 
                     try:
                         raw_row = self.model._raw_data[row]
-                        # [FIX] 산출목록(13) 우선 사용, 없으면 품명(1)
-                        item_name = str(raw_row[13]) if (len(raw_row) > 13 and raw_row[13]) else str(raw_row[1])
-                        # 규격(2) 추가 결합 (산출목록 컬럼에 '명칭+규격'으로 입력)
-                        spec_name = str(raw_row[2]) if (len(raw_row) > 2 and raw_row[2]) else ""
-                        output_name = f"{item_name} {spec_name}".strip()
+                        # [FIX] 산출목록(13) 우선 사용 - 이미 '품명+규격' 결합형이므로 규격 추가 불필요
+                        # 산출목록이 없을 때만 품명(1)+규격(2) 결합
+                        has_output_name = (len(raw_row) > 13 and raw_row[13] and str(raw_row[13]).strip())
+                        if has_output_name:
+                            output_name = str(raw_row[13]).strip()
+                        else:
+                            item_name = str(raw_row[1]) if raw_row[1] else ""
+                            spec_name = str(raw_row[2]) if (len(raw_row) > 2 and raw_row[2]) else ""
+                            output_name = f"{item_name} {spec_name}".strip() if spec_name else item_name.strip()
                         unit = str(raw_row[3]) if (len(raw_row) > 3 and raw_row[3]) else ""
-                        items_to_insert.append((output_name, qty_text, unit))
+                        
+                        # [NEW] 일목 여부 파악 (그룹 컬럼 5)
+                        group_val = str(raw_row[5]) if len(raw_row) > 5 else ""
+                        is_il_mok = (group_val == "일목")
+                        
+                        items_to_insert.append((output_name, qty_text, unit, is_il_mok))
                     except Exception as e:
                         print(f"[WARN] MainSheet data extract failed: {e}")
 
@@ -730,12 +746,25 @@ class DatabaseReferencePopup(QDialog):
                 for output_name, qty_text, unit in items_to_insert:
                     try:
                         target_row = active_row
-                        # [FIX] item()이 None일 수 있으므로 안전하게 체크 후 행 삽입 결정
+                        # [FIX] item()일 수 있으므로 안전하게 체크 후 행 삽입 결정
                         existing_item = eulji_table.item(target_row, e_cols["ITEM"])
                         if existing_item and existing_item.text().strip():
                             eulji_table.insertRow(target_row + 1)
                             target_row += 1
 
+                        # [NEW] '일목'인 경우 'i' 마크 표시
+                        if len(items_to_insert[sent_count]) > 3 and items_to_insert[sent_count][3]:
+                            mark_item = QTableWidgetItem("i")
+                            mark_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                            mark_item.setForeground(QColor("#000080")) # Navy
+                            font = mark_item.font()
+                            font.setBold(True)
+                            mark_item.setFont(font)
+                            eulji_table.setItem(target_row, e_cols["GUBUN"], mark_item)
+                        else:
+                            eulji_table.setItem(target_row, e_cols["GUBUN"], QTableWidgetItem(""))
+
+                        output_name, qty_text, unit, _ = items_to_insert[sent_count]
                         eulji_table.setItem(target_row, e_cols["ITEM"], QTableWidgetItem(output_name))
                         eulji_table.setItem(target_row, e_cols["FORMULA"], QTableWidgetItem(qty_text))
                         eulji_table.setItem(target_row, e_cols["UNIT"], QTableWidgetItem(unit))
@@ -817,6 +846,8 @@ class DatabaseReferencePopup(QDialog):
             self.reference_table.setCurrentIndex(idx)
             self.reference_table.scrollTo(idx, QTableView.ScrollHint.PositionAtCenter)
             self.status_label.setText(f"검색 결과: {found+1}행 이동")
+            if hasattr(self.parent_popup, "_log_system_event"):
+                self.parent_popup._log_system_event(f"DataDict Search: '{text}' -> found at row {found+1}")
         else:
             self.status_label.setText(f"'{text}' 검색 결과 없음")
 
@@ -833,12 +864,40 @@ class DatabaseReferencePopup(QDialog):
             raw_row = self.model._raw_data[row]
             selected_code = str(raw_row[4])
             
-            detail_table = self.parent_popup.detail_table
-            t_name = detail_table.item(self.active_target_row, 2).text().strip()
-            t_spec = detail_table.item(self.active_target_row, 3).text().strip() if detail_table.item(self.active_target_row, 3) else ""
+            detail_table = self.target_table
+            if not detail_table:
+                detail_table = getattr(self.parent_popup, 'detail_table', None)
+            if not detail_table:
+                detail_table = getattr(self.parent_popup, 'eulji_table', None)
+            if not detail_table:
+                detail_table = getattr(self.parent_popup, 'table', None)
+
+            if not detail_table:
+                print("[ERROR] Manual match target table not found")
+                return
+
+            t_name = ""
+            t_spec = ""
+            
+            # ITEM 컬럼 인덱스 확인 ( context-aware )
+            item_col = 2 # Default (Lighting Calc)
+            spec_col = 3
+            if self.is_main_sheet:
+                 item_col = self.parent_popup.EULJI_COLS.get("ITEM", 5)
+                 spec_col = -1 # 메인 시트는 규격 컬럼이 따로 없음
+            elif self.is_unit_price_popup:
+                 u_cols = getattr(self.parent_popup, "UNIT_PRICE_COLS", {})
+                 item_col = u_cols.get("LIST", 1)
+                 spec_col = u_cols.get("SPEC", 2)
+
+            t_name = detail_table.item(target_row, item_col).text().strip() if detail_table.item(target_row, item_col) else ""
+            if spec_col >= 0:
+                t_spec = detail_table.item(target_row, spec_col).text().strip() if detail_table.item(target_row, spec_col) else ""
             
             # UI 반영
-            detail_table.setItem(self.active_target_row, 1, QTableWidgetItem(selected_code))
+            detail_table.blockSignals(True)
+            detail_table.setItem(target_row, 1, QTableWidgetItem(selected_code))
+            detail_table.blockSignals(False)
             
             # [NEW] 저장 옵션에 따른 경로 결정
             save_to_original = True  # 기본값
@@ -868,6 +927,9 @@ class DatabaseReferencePopup(QDialog):
             self.parent_popup._verify_all_codes()
             self.status_label.setText(f"수동 매칭 저장 완료 ({save_location}): {t_name}")
             
+            if hasattr(self.parent_popup, "_log_system_event"):
+                self.parent_popup._log_system_event(f"Manual Match: '{t_name}' matched with code '{selected_code}' and saved to {save_location}")
+            
         except Exception as e:
             print(f"[ERROR] Manual match failed: {e}")
 
@@ -889,12 +951,24 @@ class DatabaseReferencePopup(QDialog):
                 row = idx.row()
                 qty_text = self.model._qty_inputs.get(row, "").strip()
                 
-                # [NEW] 다음 행 이동 로직 (연속 입력 지원)
-                # 특수 명령이거나 마지막 행이면 즉시 전송 후 종료
-                is_special = (qty_text in ["===", "/"]) or (qty_text and not self._is_numeric(qty_text))
-                is_last_row = (row >= self.model.rowCount() - 1)
+                # [STABILIZED] 특수 명령 및 검색 처리 (사용자 요청)
+                if qty_text == "===":
+                    # '===' 입력 시 수동 매칭 수행
+                    self._handle_manual_matching(row)
+                    # 입력칸 비우고 현재 셀 유지
+                    self.model.setData(idx, "", Qt.ItemDataRole.EditRole)
+                    return True
                 
-                if is_special or is_last_row:
+                if qty_text and not self._is_numeric(qty_text):
+                    # 텍스트 입력 시 검색 수행
+                    self._search_and_navigate(qty_text, row)
+                    # 검색 후 입력칸 비움 (다음 검색 대비)
+                    self.model.setData(idx, "", Qt.ItemDataRole.EditRole)
+                    return True
+
+                # 특수 명령이 아닌 일반 숫자인 경우 마지막 행이면 즉시 전송 후 종료
+                is_last_row = (row >= self.model.rowCount() - 1)
+                if is_last_row:
                     self._on_send_clicked()
                     return True
                 

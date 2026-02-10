@@ -71,6 +71,9 @@ class CalculationUnitPricePopup(QDialog):
         self._block_end = -1    # F5 블럭 선택 종료 행
         self._is_block_mode = False  # 블럭 모드 활성화 여부
         self._move_mode = False  # F7 이동 모드 (잘라내기 후 붙이기 대기)
+        self.base_formula = ""  # 부모 테이블의 순수 산출수식 (배수 제외)
+        self.current_multiplier = 1.0  # 현재 적용된 배수
+
 
         # [NEW] 외부 모듈(자료사전 등)에서 참조할 수 있도록 속성 노출
         from utils.column_settings import UNIT_PRICE_COLS
@@ -1002,9 +1005,16 @@ class CalculationUnitPricePopup(QDialog):
 
             # 로드 실패 시 또는 데이터가 없는 경우 기본 30행 구성
             if not loaded:
-                for _ in range(30):
+                for i in range(30):
                     self.add_row()
-                log_msg += "  -> No data found, initialized 30 blank rows.\n"
+                    # [FIX] 첫 행에 부모의 산출목록 명칭 출력 (사용자 요청)
+                    if i == 0 and item_name:
+                        self.table.setItem(0, self.UNIT_PRICE_COLS["LIST"], QTableWidgetItem(item_name))
+                        # [FIX] 단위수량 기본값 1 설정 (사용자 요청)
+                        self.table.setItem(0, self.UNIT_PRICE_COLS["UNIT_QTY"], QTableWidgetItem("1"))
+                        # 단위계 즉시 계산 유도
+                        self._update_row_total(0)
+                log_msg += f"  -> No data found, initialized 30 rows. First row filled with '{item_name}' and qty 1.\n"
             
             self.table.blockSignals(orig_blocked)
             
@@ -1188,23 +1198,44 @@ class CalculationUnitPricePopup(QDialog):
                 e_table = getattr(self.parent_tab, "eulji_table", None)
                 if not e_table: return
 
+                # [NEW] 전체 배수(Total Multiplier) 계산: 모든 단위계(UNIT_TOTAL)의 합
+                total_multiplier = 0.0
+                for r in range(self.table.rowCount()):
+                    t_item = self.table.item(r, self.UNIT_PRICE_COLS["UNIT_TOTAL"])
+                    if t_item:
+                        try:
+                            # 쉼표 제거 후 숫자로 변환
+                            val = float(t_item.text().replace(',', ''))
+                            total_multiplier += val
+                        except: pass
+
                 e_table.blockSignals(True)
 
-                # 단위 (Index 8) → "식"
+                # 1. 단위 (Index 8) → "식" (데이터가 있는 경우 강제 고정)
                 unit_col = e_cols.get("UNIT", 8)
                 e_table.setItem(self.target_row, unit_col, QTableWidgetItem("식"))
 
-                # 수량/수식 (Index 6) → "1"
+                # 2. 수량/수식 (Index 6) 업데이트
+                # - 배수가 1이면 원본 수식 유지
+                # - 배수가 1이 아니면 (원본수식)*배수 형식으로 업데이트
                 formula_col = e_cols.get("FORMULA", 6)
-                e_table.setItem(self.target_row, formula_col, QTableWidgetItem("1"))
+                
+                base = self.base_formula if self.base_formula else "1"
+                if total_multiplier == 1.0:
+                    new_formula = base
+                else:
+                    # 소수점 4자리까지 표시 (필요시 조정)
+                    mult_str = format(total_multiplier, 'g')
+                    new_formula = f"({base})*{mult_str}"
+                
+                e_table.setItem(self.target_row, formula_col, QTableWidgetItem(new_formula))
 
-                # [NEW] 산출목록 컬럼이 비어있으면 산출일위표의 대표(첫행) 자료로 채움
+                # 3. 산출목록 컬럼 명칭 자동 채우기
                 item_col = e_cols.get("ITEM", 5)
                 existing_item = e_table.item(self.target_row, item_col)
                 existing_text = existing_item.text().strip() if existing_item else ""
                 if not existing_text and first_row_text:
                     e_table.setItem(self.target_row, item_col, QTableWidgetItem(first_row_text))
-                    print(f"[DEBUG] Parent row {self.target_row} ITEM auto-filled with representative: '{first_row_text}'")
 
                 e_table.blockSignals(False)
 
@@ -1212,7 +1243,7 @@ class CalculationUnitPricePopup(QDialog):
                 if hasattr(self.parent_tab, "on_eulji_cell_changed"):
                     self.parent_tab.on_eulji_cell_changed(self.target_row, formula_col)
 
-                print(f"[DEBUG] Parent row {self.target_row} synced to '식, 1' due to unit price data.")
+                print(f"[DEBUG] Parent row {self.target_row} synced. Multiplier: {total_multiplier}")
         except Exception as e:
             print(f"[ERROR] _sync_to_parent failed: {e}")
 
@@ -1264,7 +1295,28 @@ class CalculationUnitPricePopup(QDialog):
             self.target_row = row
             self.target_col = col
 
-            # 2. 대상 아이템명 가져오기
+            # 2. 대상 수식 파싱 (Multiplier 추출)
+            # 을지 테이블의 산출수식 컬럼에서 원본 수식과 배수를 분리하여 저장
+            if parent_tab and hasattr(parent_tab, 'eulji_table'):
+                formula_col = getattr(parent_tab, "EULJI_COLS", {}).get("FORMULA", 6)
+                f_item = parent_tab.eulji_table.item(row, formula_col)
+                full_formula = f_item.text().strip() if f_item else ""
+                
+                # 패턴: (원본수식)*배수 (예: (2.5)*2)
+                match = re.match(r'^\((.*)\)\s*\*\s*([0-9.]+)$', full_formula)
+                if match:
+                    self.base_formula = match.group(1)
+                    try:
+                        self.current_multiplier = float(match.group(2))
+                    except:
+                        self.current_multiplier = 1.0
+                else:
+                    self.base_formula = full_formula
+                    self.current_multiplier = 1.0
+                
+                print(f"[DEBUG] formula parsed: base='{self.base_formula}', multiplier={self.current_multiplier}")
+
+            # 3. 대상 아이템명 가져오기
             item_name = ""
             if parent_tab and hasattr(parent_tab, 'eulji_table'):
                  item = parent_tab.eulji_table.item(row, col)
