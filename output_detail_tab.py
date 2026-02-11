@@ -389,18 +389,20 @@ class OutputDetailTab:
 
         # 1. 상단 정보 바
         self.header_frame = QFrame()
-        self.header_frame.setFixedHeight(75)  # 메뉴(26) + 툴바(45) + 여유
+        self.header_frame.setFixedHeight(
+            110
+        )  # 메뉴(24) + 툴바(48) + 프로젝트(30) + 여유
         self.header_frame.setStyleSheet(
             "background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;"
         )
         # 상단 통합 레이아웃 (QVBoxLayout)
         header_main_layout = QVBoxLayout(self.header_frame)
-        header_main_layout.setContentsMargins(10, 3, 10, 3)
-        header_main_layout.setSpacing(2)
+        header_main_layout.setContentsMargins(8, 2, 8, 2)
+        header_main_layout.setSpacing(1)
 
         # 0행: 일반 메뉴
         menu_area = QWidget()
-        menu_area.setFixedHeight(24)  # 메뉴 행 높이
+        menu_area.setFixedHeight(22)  # 메뉴 행 높이
         menu_layout = QHBoxLayout(menu_area)
         menu_layout.setContentsMargins(0, 0, 0, 0)
         menu_layout.setSpacing(8)
@@ -440,7 +442,7 @@ class OutputDetailTab:
 
         # 0-1행: 모듈 툴바 (새로 추가)
         toolbar_area = QWidget()
-        toolbar_area.setFixedHeight(42)  # 툴바 높이 증가
+        toolbar_area.setFixedHeight(46)  # 툴바 높이 증가
         toolbar_area.setStyleSheet("""
             QWidget {
                 background-color: #f8f9fa;
@@ -448,8 +450,8 @@ class OutputDetailTab:
             }
         """)
         toolbar_layout = QHBoxLayout(toolbar_area)
-        toolbar_layout.setContentsMargins(3, 1, 3, 1)
-        toolbar_layout.setSpacing(3)
+        toolbar_layout.setContentsMargins(2, 1, 2, 1)
+        toolbar_layout.setSpacing(2)
 
         # 툴바 버튼 스타일 (더 컴팩트하게)
         toolbar_btn_style = """
@@ -457,11 +459,11 @@ class OutputDetailTab:
                 background-color: #ffffff;
                 border: 1px solid #ced4da;
                 border-radius: 3px;
-                padding: 2px 6px;
+                padding: 1px 4px;
                 font-family: '새굴림';
                 font-size: 9pt;
-                min-width: 68px;
-                max-height: 28px;
+                min-width: 65px;
+                max-height: 32px;
             }
             QPushButton:hover {
                 background-color: #e9ecef;
@@ -711,14 +713,14 @@ class OutputDetailTab:
             # 갑지: 공종 카테고리 메뉴 표시, 을지 메뉴 숨김
             self.gongjong_category_combo.show()
             self.eulji_category_menu_widget.hide()
-            self.header_frame.setFixedHeight(95)  # 갑지: 메뉴+툴바+프로젝트 행
+            self.header_frame.setFixedHeight(110)  # 갑지: 메뉴+툴바+프로젝트 행
         else:
             self.btn_gapji.setStyleSheet(self.sheet_inactive_style)
             self.btn_eulji.setStyleSheet(self.sheet_active_style)
             # 을지: 공종 카테고리 메뉴 숨김, 을지 메뉴 표시
             self.gongjong_category_combo.hide()
             self.eulji_category_menu_widget.show()
-            self.header_frame.setFixedHeight(125)  # 을지: 메뉴+툴바+프로젝트+을지메뉴
+            self.header_frame.setFixedHeight(140)  # 을지: 메뉴+툴바+프로젝트+을지메뉴
 
     def _on_lighting_power_clicked(self):
         """전등/전열 버튼 클릭 시 호출"""
