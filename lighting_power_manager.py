@@ -98,8 +98,8 @@ class LightingPowerPopup(QDialog):
         self.setMinimumSize(
             1192, 750
         )  # 창 너비 확장 (단위수식 +30px 추가 확장, 총 +62px)
-        self.db_path = r"D:\이지맥스\산출목록\조명기구타입.db"
-        self.ref_db_path = r"D:\이지맥스\data\자료사전.db"
+        self.db_path = r"D:\오아시스\산출목록\조명기구타입.db"
+        self.ref_db_path = r"D:\오아시스\data\자료사전.db"
         self.reference_codes = set()  # 자료사전 코드 매칭용
 
         # [NEW] 부모 탭 참조 (1식 저장용)
@@ -797,7 +797,7 @@ class LightingPowerPopup(QDialog):
             manual_mappings = {}
 
             # 1. 원본 매핑 로드
-            original_mapping_path = r"D:\이지맥스\data\manual_mapping.json"
+            original_mapping_path = r"D:\오아시스\data\manual_mapping.json"
             if os.path.exists(original_mapping_path):
                 with open(original_mapping_path, "r", encoding="utf-8") as f:
                     manual_mappings = json.load(f)
@@ -857,7 +857,7 @@ class LightingPowerPopup(QDialog):
             # [Step 12] 수동 매핑 데이터 로드 (전등수량 산출인 경우에만)
             manual_mappings = {}
             if self.item_name == "전등수량(갯수)산출":
-                mapping_path = r"D:\이지맥스\data\manual_mapping.json"
+                mapping_path = r"D:\오아시스\data\manual_mapping.json"
                 if os.path.exists(mapping_path):
                     try:
                         with open(mapping_path, "r", encoding="utf-8") as f:
