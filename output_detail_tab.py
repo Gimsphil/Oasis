@@ -1691,15 +1691,9 @@ class OutputDetailTab:
             },
             # Phase 6: 전문 기능
             "graphic_output": {
-                "class": "GraphicOutputPopup",
+                "class": "PDFOutputPopup",
                 "module": "popups.graphic_output_popup",
-                "title": "그림산출",
-            },
-            "cad_integration": {
-                "class": None,
-                "module": "core.cad_integration",
-                "function": "show_cad_import_dialog",
-                "title": "CAD 파일 가져오기",
+                "title": "PDF 산출",
             },
             "cad_integration": {
                 "class": None,
