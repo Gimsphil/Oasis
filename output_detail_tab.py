@@ -847,10 +847,10 @@ class OutputDetailTab:
 
     def _load_gongjong_list_from_file(self, category):
         """파일에서 공종 리스트 로드"""
-        # 경로: D:\이지맥스\사용자목록\공종리스트\{category}.txt
+        # 경로: D:\오아시스\사용자목록\공종리스트\{category}.txt
         # category가 '공통'인 경우 '공통.txt' 로딩
 
-        base_path = r"D:\이지맥스\사용자목록\공종리스트"
+        base_path = r"D:\오아시스\사용자목록\공종리스트"
         file_path = os.path.join(base_path, f"{category}.txt")
 
         self.gongjong_list.clear()  # Clear existing items
