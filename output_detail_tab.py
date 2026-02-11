@@ -491,7 +491,7 @@ class OutputDetailTab:
             ("설계변경", "design_change", "design_change_popup"),
             None,  # 구분선
             # Phase 6: 전문 기능
-            ("그림산출", "graphic_output", "graphic_output_popup"),
+            ("PDF산출", "graphic_output", "graphic_output_popup"),
             ("CAD연동", "cad_integration", "cad_integration"),
         ]
 
