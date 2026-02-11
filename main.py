@@ -173,7 +173,7 @@ def main():
         window.activateWindow()  # 윈도우 활성화
         print("[OK] Window displayed successfully")
         print("\n" + "="*60)
-        print("[SUCCESS] 산출내역 관리 시스템이 시작되었습니다!")
+        print("[SUCCESS] OASIS가 시작되었습니다.")
         print("="*60 + "\n")
         
         # 정상 실행

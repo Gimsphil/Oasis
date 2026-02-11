@@ -448,7 +448,7 @@ class PDFOutputPopup(QDialog):
 
         for output_type, info in self.OUTPUT_TYPES.items():
             radio = QRadioButton(f"{info['icon']} {output_type}")
-            radio.setData(output_type)
+            radio.setProperty("type", output_type) # setData() 대신 setProperty() 사용
             radio.setToolTip(info["description"])
             self.type_button_group.addButton(radio)
             type_layout.addWidget(radio)
