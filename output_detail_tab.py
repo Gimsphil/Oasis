@@ -67,10 +67,12 @@ from managers.event_filter import TableEventFilter
 try:
     with open("tab_debug.log", "a", encoding="utf-8") as _f:
         import datetime as _dt
-        _f.write(f"[{_dt.datetime.now().strftime('%H:%M:%S')}] output_detail_tab.py module loaded with new modular structure\n")
+
+        _f.write(
+            f"[{_dt.datetime.now().strftime('%H:%M:%S')}] output_detail_tab.py module loaded with new modular structure\n"
+        )
 except:
     pass
-
 
 
 class OutputDetailTab:
@@ -182,6 +184,9 @@ class OutputDetailTab:
         # 실행 취소(Undo) 스택
         self.undo_stack = []
 
+        # [Phase 1-3] 클립보드 (Ctrl+C/V/X용)
+        self._clipboard = None
+
         # [NEW] 산출일위표 트리거 초기화
         self.unit_price_trigger = CalculationUnitPriceTrigger(self)
 
@@ -195,22 +200,28 @@ class OutputDetailTab:
 
         # 전등/전열 매니저 초기화 (create_tab 이전에 수행해야 패널 등록 가능)
         from lighting_power_manager import LightingPowerManager
+
         self.lighting_manager = LightingPowerManager(self)
-        
+
         # [NEW] 미저장 데이터 초기화 (사용자 요청: 새로 프로그램을 시작하면 행당 데이터 초기화)
         self._cleanup_unsaved_chunks()
 
         print(
             f"[DEBUG] OutputDetailTab Init. Path exists: {os.path.exists(self.gongjong_file_path)}"
         )
-        self._log_system_event("Application initialized with Unit Price Sync and Data Dict special commands.")
+        self._log_system_event(
+            "Application initialized with Unit Price Sync and Data Dict special commands."
+        )
 
     def _cleanup_unsaved_chunks(self):
         """미저장(Unsaved) 세션의 일위표 데이터 초기화"""
         try:
             import shutil
+
             root_path = os.path.dirname(os.path.abspath(__file__))
-            unsaved_dir = os.path.join(root_path, "data", "unit_price_chunks", "_unsaved_session_")
+            unsaved_dir = os.path.join(
+                root_path, "data", "unit_price_chunks", "_unsaved_session_"
+            )
             if os.path.exists(unsaved_dir):
                 print(f"[DEBUG] Cleaning up unsaved chunks: {unsaved_dir}")
                 shutil.rmtree(unsaved_dir)
@@ -229,6 +240,106 @@ class OutputDetailTab:
         self.undo_stack = []
         # [NEW] 산출일위표 트리거 초기화
         self.unit_price_trigger = CalculationUnitPriceTrigger(self)
+
+    def load_basic_work_template(self):
+        """[Phase 2-4] 기초작업 템플릿 로드"""
+        import json
+
+        template_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "templates",
+            "basic_work.json",
+        )
+
+        if not os.path.exists(template_path):
+            print(f"[WARN] 기초작업 템플릿 없음: {template_path}")
+            return
+
+        try:
+            with open(template_path, "r", encoding="utf-8") as f:
+                template = json.load(f)
+
+            # 갑지 기본값 설정
+            if "gapji_defaults" in template:
+                defaults = template["gapji_defaults"]
+                # TODO: 갑지 테이블의 $H, $L 컬럼에 기본값 설정
+
+            # 을지 데이터 로드
+            if "eulji_items" in template:
+                for item in template["eulji_items"]:
+                    gongjong = template.get("gongjong", "000. 기초작업")
+                    if gongjong not in self.eulji_data:
+                        self.eulji_data[gongjong] = []
+
+                    # 행 데이터 구성
+                    row_data = {
+                        "num": item.get("num", ""),
+                        "gubun": item.get("gubun", ""),
+                        "from": item.get("from", ""),
+                        "to": item.get("to", ""),
+                        "circuit": item.get("circuit", ""),
+                        "item": item.get("item", ""),
+                        "formula": item.get("formula", ""),
+                        "total": item.get("total", ""),
+                        "unit": item.get("unit", ""),
+                        "remark": item.get("remark", ""),
+                    }
+                    self.eulji_data[gongjong].append(row_data)
+
+                    # 일위대가 데이터 저장
+                    if item.get("unit_price", {}).get("enabled", False):
+                        unit_items = item.get("unit_price", {}).get("items", [])
+                        row_idx = len(self.eulji_data[gongjong]) - 1
+                        chunk_file = os.path.join(
+                            "data", "unit_price_chunks", f"{gongjong}_{row_idx}.json"
+                        )
+                        # JSON 파일로 저장 (단위계 계산 포함)
+                        self._save_unit_price_chunk(chunk_file, unit_items)
+
+            print(
+                f"[INFO] 기초작업 템플릿 로드 완료: {len(template.get('eulji_items', []))}개 항목"
+            )
+
+        except Exception as e:
+            print(f"[ERROR] 기초작업 템플릿 로드 실패: {e}")
+
+    def _save_unit_price_chunk(self, file_path: str, items: list):
+        """일위대가 데이터를 JSON 파일로 저장"""
+        import json
+
+        try:
+            # 단위계 계산
+            total = 0.0
+            calculated_items = []
+            for item in items:
+                qty_str = item.get("qty", "0")
+                try:
+                    from utils.formula_parser import parse_formula
+
+                    qty = parse_formula(qty_str)
+                except:
+                    qty = 0.0
+                total += qty
+                calculated_items.append(
+                    {
+                        "name": item.get("name", ""),
+                        "qty": qty_str,
+                        "unit_total": qty,
+                    }
+                )
+
+            data = {
+                "items": calculated_items,
+                "total": total,
+            }
+
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+
+        except Exception as e:
+            print(f"[WARN] 일위대가 저장 실패: {file_path} - {e}")
 
     def record_undo(self, table, action, row_index, data=None):
         """작업 기록 (Undo용)"""
@@ -293,7 +404,7 @@ class OutputDetailTab:
         menu_layout = QHBoxLayout(menu_area)
         menu_layout.setContentsMargins(0, 0, 0, 0)
         menu_layout.setSpacing(10)
-        
+
         menu_btn_style = """
             QPushButton {
                 background-color: transparent;
@@ -308,8 +419,15 @@ class OutputDetailTab:
                 border-radius: 2px;
             }
         """
-        
-        for menu_name, shortcut_key in [("파일(F)", "F"), ("편집(E)", "E"), ("보기(V)", "V"), ("도구(T)", "T"), ("시스템로그(L)", "L"), ("도움말(H)", "H")]:
+
+        for menu_name, shortcut_key in [
+            ("파일(F)", "F"),
+            ("편집(E)", "E"),
+            ("보기(V)", "V"),
+            ("도구(T)", "T"),
+            ("시스템로그(L)", "L"),
+            ("도움말(H)", "H"),
+        ]:
             btn = QPushButton(menu_name)
             btn.setStyleSheet(menu_btn_style)
             # [NEW] 시스템 로그 버튼 연결
@@ -319,7 +437,7 @@ class OutputDetailTab:
             elif "도움말" in menu_name:
                 btn.clicked.connect(self._show_about_dialog)
             menu_layout.addWidget(btn)
-        
+
         menu_layout.addStretch()
         header_main_layout.addWidget(menu_area)
 
@@ -328,20 +446,22 @@ class OutputDetailTab:
         project_row_widget.setFixedHeight(26)  # 프로젝트 행 높이 고정
         project_row_layout = QHBoxLayout(project_row_widget)
         project_row_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         self.lbl_project_name = QLabel("Project: -")
         self.lbl_project_name.setStyleSheet(
             "font-weight: bold; color: #333; font-size: 11pt; font-family: '새굴림';"
         )
         project_row_layout.addWidget(self.lbl_project_name)
-        
+
         project_row_layout.addSpacing(20)
-        
+
         # 산출공종 라벨을 프로젝트명 행으로 이동 (사용자 요청)
         self.current_gongjong_label = QLabel("산출공종: -")
-        self.current_gongjong_label.setStyleSheet("color: #666; font-size: 11pt; font-family: '새굴림';")
+        self.current_gongjong_label.setStyleSheet(
+            "color: #666; font-size: 11pt; font-family: '새굴림';"
+        )
         project_row_layout.addWidget(self.current_gongjong_label)
-        
+
         project_row_layout.addStretch()
 
         # 공종 카테고리 콤보박스 (우측 이동)
@@ -349,15 +469,13 @@ class OutputDetailTab:
         self.gongjong_category_combo.setStyleSheet("font-family: '새굴림';")
         self.gongjong_category_combo.setFixedWidth(120)
         self.gongjong_category_combo.setFixedWidth(120)
-        self.gongjong_category_combo.addItems(
-            ["공통", "전기", "설비", "건축"]
-        )
-        self.gongjong_category_combo.setCurrentText("전기") # 기본값 전기 설정
+        self.gongjong_category_combo.addItems(["공통", "전기", "설비", "건축"])
+        self.gongjong_category_combo.setCurrentText("전기")  # 기본값 전기 설정
         self.gongjong_category_combo.currentTextChanged.connect(
             self._on_category_changed
         )
         project_row_layout.addWidget(self.gongjong_category_combo)
-        
+
         header_main_layout.addWidget(project_row_widget)
 
         # 2행: 을지 전용 카테고리 메뉴 - 산출공종이 1행으로 이동하면서 한 칸 위로 배치 (사용자 요청)
@@ -397,7 +515,7 @@ class OutputDetailTab:
         tab_layout.addWidget(self.btn_eulji)
 
         tab_layout.addStretch()
-        
+
         main_layout.addWidget(self.tab_frame)
 
         # 3. 스택 위젯 (중앙)
@@ -406,13 +524,13 @@ class OutputDetailTab:
 
         # --- [갑지 화면] ---
         self.gapji_widget = QWidget()
-        gapji_layout = QVBoxLayout(self.gapji_widget) # 메인 레이아웃은 VBox로 변경
+        gapji_layout = QVBoxLayout(self.gapji_widget)  # 메인 레이아웃은 VBox로 변경
         gapji_layout.setContentsMargins(0, 0, 0, 0)
         gapji_layout.setSpacing(0)
 
         # [NEW] 갑지용 스플리터 도입 (경계 구분 명확화 및 리사이징 지원)
         self.gapji_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.gapji_splitter.setHandleWidth(8) # 핸들 폭 확대 (사용자 요청)
+        self.gapji_splitter.setHandleWidth(8)  # 핸들 폭 확대 (사용자 요청)
         self.gapji_splitter.setStyleSheet("""
             QSplitter::handle {
                 background-color: #dee2e6;
@@ -426,17 +544,19 @@ class OutputDetailTab:
         # 중앙: 갑지 테이블
         self.gapji_table = GapjiTableWidget(self)
         # 2행 공종순서 칸에 '번호정리' 버튼 배치 (사용자 요청)
-        self.gapji_table.set_reorder_button(1, self.GONGJONG_NUM_COL, self._create_reorder_button())
+        self.gapji_table.set_reorder_button(
+            1, self.GONGJONG_NUM_COL, self._create_reorder_button()
+        )
         self.gapji_splitter.addWidget(self.gapji_table)
 
         # 우측: 공종 리스트 패널
         self.side_panel_widget = GongjongListPanel(self)
-        self.gongjong_list = self.side_panel_widget.list_widget # 하위 호환성 유지
+        self.gongjong_list = self.side_panel_widget.list_widget  # 하위 호환성 유지
         self.gapji_splitter.addWidget(self.side_panel_widget)
-        
+
         # 초기 비율 설정 (전체 창 크기에 맞게 8:2 배분)
         self.gapji_splitter.setSizes([1150, 250])
-        
+
         gapji_layout.addWidget(self.gapji_splitter)
 
         self.stacked_widget.addWidget(self.gapji_widget)
@@ -449,7 +569,7 @@ class OutputDetailTab:
 
         # 스플리터
         self.eulji_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.eulji_splitter.setHandleWidth(8) # 핸들 폭 확대 (Gapji와 통일)
+        self.eulji_splitter.setHandleWidth(8)  # 핸들 폭 확대 (Gapji와 통일)
         self.eulji_splitter.setStyleSheet("""
             QSplitter::handle {
                 background-color: #dee2e6;
@@ -465,19 +585,23 @@ class OutputDetailTab:
         setup_eulji_table(self.eulji_table)
         # [FORCE] 산출목록(ITEM) 컬럼 너비를 400px로 강제 설정 (사용자 요청 1/2 축소 반영)
         self.eulji_table.setColumnWidth(self.EULJI_COLS["ITEM"], 400)
-        
+
         self.eulji_table.cellChanged.connect(self.on_eulji_cell_changed)
         self.eulji_table.cellClicked.connect(self.on_eulji_cell_clicked)
-        self.eulji_table.cellPressed.connect(self.on_eulji_cell_clicked) # [NEW] 누름 이벤트에도 연결하여 반응성 향상
-        
+        self.eulji_table.cellPressed.connect(
+            self.on_eulji_cell_clicked
+        )  # [NEW] 누름 이벤트에도 연결하여 반응성 향상
+
         # [NEW] 키보드 이동 대응: 선택 영역 변경 시 팝업 연동
-        self.eulji_table.selectionModel().selectionChanged.connect(self._on_eulji_selection_changed)
+        self.eulji_table.selectionModel().selectionChanged.connect(
+            self._on_eulji_selection_changed
+        )
         # [NEW] 더블 클릭 연결
         self.eulji_table.cellDoubleClicked.connect(self._on_eulji_double_clicked)
         self.eulji_splitter.addWidget(self.eulji_table)
 
         # 전등/전열 산출공종 우측 패널 추가
-        if hasattr(self, 'lighting_manager'):
+        if hasattr(self, "lighting_manager"):
             self.eulji_splitter.addWidget(self.lighting_manager.create_side_panel())
         # 우측 산출공종 패널 삭제 (사용자 요청)
         # self._create_output_gongjong_panel(self.eulji_splitter)
@@ -502,7 +626,7 @@ class OutputDetailTab:
         """갑지/을지 화면 전환 (엑셀 시트 스타일)"""
         # 을지에서 갑지로 전환 시 현재 데이터 저장 및 마커 업데이트
         if self.stacked_widget.currentIndex() == 1 and index == 0:
-            if hasattr(self, 'current_gongjong') and self.current_gongjong:
+            if hasattr(self, "current_gongjong") and self.current_gongjong:
                 self._save_eulji_data(self.current_gongjong)
                 self._update_gapji_marker(self.current_gongjong)
 
@@ -525,7 +649,7 @@ class OutputDetailTab:
     def _on_lighting_power_clicked(self):
         """전등/전열 버튼 클릭 시 호출"""
         print("[DEBUG] Lighting/Power button clicked")
-        if hasattr(self, 'lighting_manager'):
+        if hasattr(self, "lighting_manager"):
             self.lighting_manager.toggle_panel()
 
     def _on_eulji_category_clicked(self, category):
@@ -581,7 +705,7 @@ class OutputDetailTab:
 
         # 리스트 위젯
         self.output_gongjong_list = QListWidget()
-        
+
         # 폰트 설정 (굴림체 적용)
         out_font = QFont("굴림체", 11)
         out_font.setStretch(100)
@@ -631,12 +755,12 @@ class OutputDetailTab:
 
             self._refresh_gongjong_list()
             self._refresh_output_gongjong_list()
-            
+
             # [NEW] 동적 공종 리스트 초기 로딩 (공통)
             current_category = self.gongjong_category_combo.currentText()
             if current_category:
                 self._load_gongjong_list_from_file(current_category)
-                
+
         except Exception as e:
             print(f"[ERROR] Failed to load gongjong: {e}")
 
@@ -649,12 +773,12 @@ class OutputDetailTab:
         """파일에서 공종 리스트 로드"""
         # 경로: D:\이지맥스\사용자목록\공종리스트\{category}.txt
         # category가 '공통'인 경우 '공통.txt' 로딩
-        
+
         base_path = r"D:\이지맥스\사용자목록\공종리스트"
         file_path = os.path.join(base_path, f"{category}.txt")
-        
-        self.gongjong_list.clear() # Clear existing items
-        
+
+        self.gongjong_list.clear()  # Clear existing items
+
         # Debug: Show what we are trying to load
         # self.gongjong_list.addItem(f"Loading: {category}...") # Temporary debug
 
@@ -663,25 +787,27 @@ class OutputDetailTab:
             return
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f: # utf-8 시도
+            with open(file_path, "r", encoding="utf-8") as f:  # utf-8 시도
                 lines = f.readlines()
         except UnicodeDecodeError:
             try:
-                with open(file_path, "r", encoding="cp949") as f: # cp949 시도 (한글 윈도우)
-                     lines = f.readlines()
+                with open(
+                    file_path, "r", encoding="cp949"
+                ) as f:  # cp949 시도 (한글 윈도우)
+                    lines = f.readlines()
             except Exception as e:
                 self.gongjong_list.addItem(f"Encoding Fail: {e}")
                 return
         except Exception as e:
             self.gongjong_list.addItem(f"Read Error: {e}")
             return
-            
+
         if not lines:
-             self.gongjong_list.addItem("(내용 없음)")
+            self.gongjong_list.addItem("(내용 없음)")
 
         for line in lines:
             # 텍스트 정규화: 탭이나 여러 공백을 단일 공백으로 치환
-            line = re.sub(r'\s+', ' ', line).strip()
+            line = re.sub(r"\s+", " ", line).strip()
             if line:
                 self.gongjong_list.addItem(line)
 
@@ -699,6 +825,7 @@ class OutputDetailTab:
             for item in self.gongjong_items:
                 list_item = QListWidgetItem(item)
                 self.output_gongjong_list.addItem(list_item)
+
     def _on_gapji_item_changed(self, item):
         """갑지 아이템 변경 시 처리 (프로젝트명 동기화 등)"""
         # 0행 공종명(산출공종) 변경 시 프로젝트명 업데이트
@@ -710,7 +837,7 @@ class OutputDetailTab:
                 if item.foreground().color() != QColor(0, 0, 0):
                     self.gapji_table.blockSignals(True)
                     item.setForeground(QColor(0, 0, 0))
-                    
+
                     # 2행(Index 1) 공종명에 "공통작업" 및 번호 "0" 자동 입력 (사용자 요청)
                     # 1. 공종순서 컬럼 (2번 컬럼)
                     seq_item = self.gapji_table.item(1, self.GONGJONG_NUM_COL)
@@ -726,22 +853,22 @@ class OutputDetailTab:
                         if not common_item:
                             common_item = QTableWidgetItem()
                             self.gapji_table.setItem(1, self.GONGJONG_COL, common_item)
+
     def _on_gapji_item_changed(self, item):
         """갑지 아이템 변경 시 처리 (프로젝트명 동기화 등)"""
         # (기존 로직은 on_gapji_cell_changed로 대부분 이동됨)
         if item.row() == 0 and item.column() == self.GONGJONG_COL:
             text = item.text()
             if text == "새로운 공사명을 등록하세요.":
-                 if item.foreground().color() != QColor(150, 150, 150):
+                if item.foreground().color() != QColor(150, 150, 150):
                     self.gapji_table.blockSignals(True)
                     item.setForeground(QColor(150, 150, 150))
                     self.gapji_table.blockSignals(False)
             else:
-                 if item.foreground().color() != QColor(0, 0, 0):
+                if item.foreground().color() != QColor(0, 0, 0):
                     self.gapji_table.blockSignals(True)
                     item.setForeground(QColor(0, 0, 0))
                     self.gapji_table.blockSignals(False)
-
 
     def _on_gongjong_item_clicked(self, item):
         """공종 아이템 클릭 시 (우측 패널)"""
@@ -749,7 +876,7 @@ class OutputDetailTab:
         if "파일 없음" in text or "오류" in text:
             return
 
-        # 1-2행(Index 0,1)은 프로젝트명 및 공통 정보이므로 보호. 
+        # 1-2행(Index 0,1)은 프로젝트명 및 공통 정보이므로 보호.
         # 현재 선택된 행과 무관하게 항상 3행(Index 2)부터 첫 빈칸을 찾아 입력함.
         target_row = 2
 
@@ -766,35 +893,39 @@ class OutputDetailTab:
             self.gapji_table.setRowCount(target_row + 10)
 
         self.gapji_table.blockSignals(True)
-        
+
         # 1. 공종명 보정: 소스 리스트의 번호는 무시하고 항상 순차 번호 부여
         # 앞부분의 숫자. 또는 숫자-숫자. 패턴 제거하여 순수 명칭만 추출
-        clean_name = re.sub(r'^[\d\.-]+\s*', '', text).strip()
-        
+        clean_name = re.sub(r"^[\d\.-]+\s*", "", text).strip()
+
         # 이전 행들 중 공종명 컬럼의 마지막 정수 번호 찾기 (순차적 번호 부여)
         next_num = 1
-        for r in range(target_row - 1, 1, -1): # 2행(index 1)까지 검색
+        for r in range(target_row - 1, 1, -1):  # 2행(index 1)까지 검색
             prev_item = self.gapji_table.item(r, self.GONGJONG_COL)
             if prev_item:
                 prev_text = prev_item.text()
-                match = re.match(r'^(\d+)', prev_text)
+                match = re.match(r"^(\d+)", prev_text)
                 if match:
                     next_num = int(match.group(1)) + 1
                     break
-        
+
         final_num = str(next_num)
-        
+
         # 공종순서 컬럼에 번호 출력 (계층형이 아닌 순차적 정수)
         num_item = QTableWidgetItem(final_num)
         num_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         self.gapji_table.setItem(target_row, self.GONGJONG_NUM_COL, num_item)
-        
+
         # 공종명 컬럼 (번호. 명칭 형태로 입력)
-        self.gapji_table.setItem(target_row, self.GONGJONG_COL, QTableWidgetItem(f"{final_num}. {clean_name}"))
-        
+        self.gapji_table.setItem(
+            target_row,
+            self.GONGJONG_COL,
+            QTableWidgetItem(f"{final_num}. {clean_name}"),
+        )
+
         # 2. 구분 자동 입력 (산출공종 버튼)
         self._set_gubun_button(target_row)
-        
+
         self.gapji_table.blockSignals(False)
         self.gapji_table.setCurrentCell(target_row, self.GONGJONG_COL)
 
@@ -804,7 +935,6 @@ class OutputDetailTab:
         current_row = self.eulji_table.currentRow()
         if current_row >= 0:
             self.eulji_table.setItem(current_row, 1, QTableWidgetItem(gongjong_text))
-
 
     def _add_gongjong(self):
         """공종 추가"""
@@ -855,7 +985,8 @@ class OutputDetailTab:
         """갑지 테이블 셀 변경 시"""
         if column == self.GONGJONG_COL:
             item = self.gapji_table.item(row, column)
-            if not item: return
+            if not item:
+                return
             text = item.text().strip()
 
             # 1. 공사명(0행) 입력 시 -> 2행(Index 1)에 "공통" 및 자동 정보 설정
@@ -863,9 +994,9 @@ class OutputDetailTab:
                 if text and text != "새로운 공사명을 등록하세요.":
                     self.gapji_table.blockSignals(True)
                     # 프로젝트명 동기화
-                    if hasattr(self, 'lbl_project_name'):
+                    if hasattr(self, "lbl_project_name"):
                         self.lbl_project_name.setText(f"Project: {text}")
-                    
+
                     # 2행(Index 1) "구분" 컬럼에 "공  통" 입력 (사용자 요청)
                     gubun_item = self.gapji_table.item(1, self.GUBUN_COL)
                     if not gubun_item:
@@ -884,7 +1015,7 @@ class OutputDetailTab:
                             self.gapji_table.setItem(1, self.GONGJONG_COL, common_item)
                         else:
                             common_item.setText(common_name)
-                    
+
                     # 2행 "공종순서" 컬럼 번호 "0" 설정 (기존 버튼 유지)
                     seq_item = self.gapji_table.item(1, self.GONGJONG_NUM_COL)
                     if not seq_item:
@@ -895,7 +1026,7 @@ class OutputDetailTab:
                         # setItem을 하면 버튼 위젯이 삭제되므로, 위젯이 없는 경우에만 setItem/setText 시도
                         if not self.gapji_table.cellWidget(1, self.GONGJONG_NUM_COL):
                             seq_item.setText("0")
-                    
+
                     self.gapji_table.blockSignals(False)
 
             # 2. 산출공종(2행 이상) 입력 시 -> 버튼 설치
@@ -903,9 +1034,9 @@ class OutputDetailTab:
                 if text:
                     self.gapji_table.blockSignals(True)
                     # 공종 패턴(번호) 확인
-                    num_match = re.match(r'^([\d\.-]+)\s*', text)
+                    num_match = re.match(r"^([\d\.-]+)\s*", text)
                     if num_match:
-                        gong_num = num_match.group(1).strip().rstrip('.')
+                        gong_num = num_match.group(1).strip().rstrip(".")
                         # 배경색 설정
                         item.setBackground(QColor(255, 255, 200))
                         # 번호 텍스트도 설정 (버튼이 없으면 보이도록, 버튼이 있으면 가려짐)
@@ -913,15 +1044,19 @@ class OutputDetailTab:
                         if not seq_item:
                             seq_item = QTableWidgetItem(gong_num)
                             seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                            self.gapji_table.setItem(row, self.GONGJONG_NUM_COL, seq_item)
+                            self.gapji_table.setItem(
+                                row, self.GONGJONG_NUM_COL, seq_item
+                            )
                         else:
-                            if not self.gapji_table.cellWidget(row, self.GONGJONG_NUM_COL):
+                            if not self.gapji_table.cellWidget(
+                                row, self.GONGJONG_NUM_COL
+                            ):
                                 seq_item.setText(gong_num)
-                    
+
                     # 산출공종 버튼 및 번호정리 버튼 배치 (항상 수행 또는 버튼이 없을 때만 수행)
                     if not self.gapji_table.cellWidget(row, self.GUBUN_COL):
                         self._set_gubun_button(row)
-                        
+
                     self.gapji_table.blockSignals(False)
 
     def on_gapji_cell_clicked(self, row, column):
@@ -933,12 +1068,15 @@ class OutputDetailTab:
         print(f"[DEBUG] CELL CLICKED: row={row}, col={column}")
         try:
             from datetime import datetime
+
             log_path = os.path.join(self.project_root, "debug_trigger.log")
             with open(log_path, "a", encoding="utf-8") as f:
-                f.write(f"[{datetime.now()}] on_eulji_cell_clicked: row={row}, col={column}\n")
+                f.write(
+                    f"[{datetime.now()}] on_eulji_cell_clicked: row={row}, col={column}\n"
+                )
         except:
             pass
-        
+
         # [REMOVED] 클릭 시 자료사전 호출 로직 제거 (사용자 재요청: 클릭 시에는 '산출일위표'가 떠야 함)
         # Tab 키 입력 시에는 TableEventFilter를 통해 여전히 '자료사전'이 호출됩니다.
 
@@ -947,7 +1085,6 @@ class OutputDetailTab:
             self.unit_price_trigger.handle_cell_selection(row, column)
         else:
             print("[ERROR] unit_price_trigger not found in OutputDetailTab!")
-            
 
     def _show_reference_popup(self, row, col):
         """자료사전 DB 팝업 통합 호출 및 인스턴스 관리"""
@@ -955,35 +1092,45 @@ class OutputDetailTab:
             # 1. 인스턴스 생성 또는 재사용
             if self.reference_popup is None:
                 from popups.database_reference_popup import DatabaseReferencePopup
-                self.reference_popup = DatabaseReferencePopup(self) # parent_popup으로 self 전달
-            
+
+                self.reference_popup = DatabaseReferencePopup(
+                    self
+                )  # parent_popup으로 self 전달
+
             # 2. 테이블 포커스/셀 설정 및 대상 테이블 감지
             target_table = None
             if hasattr(self, "eulji_table"):
-                if self.eulji_table.hasFocus() or self.eulji_table.viewport().hasFocus():
+                if (
+                    self.eulji_table.hasFocus()
+                    or self.eulji_table.viewport().hasFocus()
+                ):
                     target_table = self.eulji_table
                 self.eulji_table.setCurrentCell(row, col)
-            
+
             from PyQt6.QtWidgets import QApplication
+
             focus_w = QApplication.focusWidget()
             if not target_table and focus_w:
                 # 포커스된 위젯이 테이블이거나 테이블의 자식인 경우 탐색
                 from PyQt6.QtWidgets import QTableWidget
+
                 curr = focus_w
                 while curr:
                     if isinstance(curr, QTableWidget):
                         target_table = curr
                         break
                     curr = curr.parent()
-            
+
             # 3. 팝업 표시 (대상 테이블 명시적 전달)
             self.reference_popup.prepare_show(row, col, target_table)
             self.reference_popup.exec()
-            
+
         except Exception as e:
             with open("tab_debug.log", "a", encoding="utf-8") as f:
                 f.write(f"[ERROR] _show_reference_popup failed: {e}\n")
-            QMessageBox.critical(self.main_window, "오류", f"자료사전을 열 수 없습니다: {e}")
+            QMessageBox.critical(
+                self.main_window, "오류", f"자료사전을 열 수 없습니다: {e}"
+            )
 
     def _on_eulji_selection_changed(self, selected, deselected):
         """키보드 등으로 선택 영역 변경 시"""
@@ -997,34 +1144,44 @@ class OutputDetailTab:
         """을지 테이블 셀 변경 시"""
         try:
             if column == self.EULJI_COLS["FORMULA"]:
-                # 산출수식 변경 시 계산
+                # 산출수식 변경 시 계산 (새로운 파서 사용)
                 formula_item = self.eulji_table.item(row, column)
                 if formula_item:
                     formula = formula_item.text().strip()
                     try:
-                        # 숫자와 연산자만 필터링
-                        cleaned = re.sub(r"[^\d\+\-\*\/\.\(\)]", "", formula)
-                        if cleaned:
-                            # eval 안전성 확보를 위해 locals/globals 제한 (간소화)
-                            result = eval(cleaned, {"__builtins__": {}}, {})
-                            
-                            self.eulji_table.blockSignals(True)
-                            total_item = self.eulji_table.item(row, self.EULJI_COLS["TOTAL"])
-                            if not total_item:
-                                total_item = QTableWidgetItem()
-                                self.eulji_table.setItem(row, self.EULJI_COLS["TOTAL"], total_item)
-                            total_item.setText(str(result))
-                            self.eulji_table.blockSignals(False)
+                        # [Phase 1-1] 새로운 파서 사용: 문자 포함 수식 지원
+                        from utils.formula_parser import parse_formula
+
+                        result = parse_formula(formula)
+
+                        self.eulji_table.blockSignals(True)
+                        total_item = self.eulji_table.item(
+                            row, self.EULJI_COLS["TOTAL"]
+                        )
+                        if not total_item:
+                            total_item = QTableWidgetItem()
+                            self.eulji_table.setItem(
+                                row, self.EULJI_COLS["TOTAL"], total_item
+                            )
+
+                        # 결과가 0이 아니거나 수식이 있으면 표시
+                        if result != 0 or formula.strip():
+                            # 소수점 정리 (불필요한 .0 제거)
+                            if result == int(result):
+                                total_item.setText(str(int(result)))
+                            else:
+                                total_item.setText(str(result))
                         else:
-                            # 수식이 비어있으면 '계' 컬럼도 비움
-                            self._clear_eulji_total(row)
-                    except:
+                            total_item.setText("")
+                        self.eulji_table.blockSignals(False)
+                    except Exception as e:
+                        print(f"[WARN] 수식 계산 실패: {formula} -> {e}")
                         self._clear_eulji_total(row)
 
             # [성능 최적화] 즉시 저장 대신 타이머 시작 (300ms 후 실행)
-            if hasattr(self, 'save_timer'):
+            if hasattr(self, "save_timer"):
                 self.save_timer.start(300)
-                
+
         except Exception as e:
             print(f"[ERROR] on_eulji_cell_changed: {e}")
 
@@ -1038,18 +1195,19 @@ class OutputDetailTab:
 
     def _on_save_timer_timeout(self):
         """지연된 데이터 저장 및 마커 업데이트 실행"""
-        if hasattr(self, 'current_gongjong') and self.current_gongjong:
+        if hasattr(self, "current_gongjong") and self.current_gongjong:
             self._save_eulji_data(self.current_gongjong)
             self._update_gapji_marker(self.current_gongjong)
 
     def _on_eulji_double_clicked(self, row, column):
         """을지 테이블 더블 클릭 시 - 전등/전열 팝업 재진입"""
         item = self.eulji_table.item(row, self.EULJI_COLS["ITEM"])
-        if not item: return
-        
+        if not item:
+            return
+
         # 산출목록이 "전등수량(갯수)산출"인 경우 팝업 호출
         if item.text() == "전등수량(갯수)산출":
-            if hasattr(self, 'lighting_manager'):
+            if hasattr(self, "lighting_manager"):
                 # 현재 행의 상세 데이터 로드하여 팝업 열기
                 self.lighting_manager.edit_row(row)
 
@@ -1128,30 +1286,32 @@ class OutputDetailTab:
         item = self.gapji_table.item(row, self.GONGJONG_COL)
         if item:
             new_gongjong_name = item.text().strip()
-            
+
             # 1. 이전 공종 데이터 저장
             if self.current_gongjong and self.current_gongjong != new_gongjong_name:
                 self._save_eulji_data(self.current_gongjong)
                 self._update_gapji_marker(self.current_gongjong)
-            
+
             # 2. 새 공종 정보 업데이트
             self.current_gongjong = new_gongjong_name
             self.current_gongjong_label.setText(f"산출공종: {new_gongjong_name}")
-            
+
             # 3. 새 공종 데이터 로드
             self._load_eulji_data(new_gongjong_name)
-            
+
             # 4. 화면 전환
             self._switch_view(1)
             print(f"[DEBUG] Navigating to Eulji for: {new_gongjong_name}")
         else:
-            QMessageBox.warning(self.main_window, "알림", "공종명이 입력되지 않았습니다.")
+            QMessageBox.warning(
+                self.main_window, "알림", "공종명이 입력되지 않았습니다."
+            )
 
     def _save_eulji_data(self, gongjong_name):
         """현재 을지 테이블의 데이터를 메모리에 저장 (임시 캐시)"""
         if not gongjong_name:
             return
-            
+
         data = []
         for r in range(self.eulji_table.rowCount()):
             row_data = {}
@@ -1164,34 +1324,34 @@ class OutputDetailTab:
                     has_content = True
             if has_content:
                 data.append(row_data)
-        
+
         self.eulji_data[gongjong_name] = data
-        
+
     def _load_eulji_data(self, gongjong_name):
         """메모리에서 특정 공종의 을지 데이터를 불러와 테이블에 표시"""
         self.eulji_table.blockSignals(True)
         self.eulji_table.clearContents()
-        
+
         data = self.eulji_data.get(gongjong_name, [])
         for r, row_data in enumerate(data):
             # 필요시 행 추가
             if r >= self.eulji_table.rowCount():
                 self.eulji_table.setRowCount(r + 10)
-            
+
             for col_idx, text in row_data.items():
                 self.eulji_table.setItem(r, col_idx, QTableWidgetItem(text))
-        
+
         self.eulji_table.blockSignals(False)
 
     def _update_gapji_marker(self, gongjong_name):
         """갑지 테이블의 #. 컬럼에 데이터 유무(*) 표시 (사용자 요청)"""
         if not gongjong_name:
             return
-            
+
         # 데이터 유무 확인 (비어있지 않은 행이 하나라도 있는지)
         data = self.eulji_data.get(gongjong_name, [])
         has_data = len(data) > 0
-        
+
         # 갑지에서 해당 공종 행 찾기
         for r in range(self.gapji_table.rowCount()):
             item = self.gapji_table.item(r, self.GONGJONG_COL)
@@ -1207,10 +1367,10 @@ class OutputDetailTab:
     def _reorder_gongjong_numbers(self):
         """갑지 테이블의 공종 번호를 순차적/계층적으로 재정리 (사용자 요청)"""
         self.gapji_table.blockSignals(True)
-        
+
         last_old_base = None
         new_base_counter = 0
-        
+
         # 3행(Index 2)부터 시작
         for r in range(2, self.gapji_table.rowCount()):
             item = self.gapji_table.item(r, self.GONGJONG_COL)
@@ -1218,33 +1378,33 @@ class OutputDetailTab:
                 # 빈 행은 순번도 비움
                 self.gapji_table.setItem(r, self.GONGJONG_NUM_COL, QTableWidgetItem(""))
                 continue
-                
+
             text = item.text().strip()
             # 1.1.2 등 계층형 패턴 추출
-            match = re.match(r'^([\d\.-]+)\s*(.*)', text)
-            
+            match = re.match(r"^([\d\.-]+)\s*(.*)", text)
+
             if match:
-                old_full_prefix = match.group(1).strip().rstrip('.')
+                old_full_prefix = match.group(1).strip().rstrip(".")
                 name = match.group(2).strip()
-                
+
                 # 메인 번호(앞쪽 정수) 추출
-                base_match = re.match(r'^(\d+)', old_full_prefix)
+                base_match = re.match(r"^(\d+)", old_full_prefix)
                 if base_match:
                     old_base = base_match.group(1)
-                    suffix = old_full_prefix[len(old_base):] # ".1" 등
-                    
+                    suffix = old_full_prefix[len(old_base) :]  # ".1" 등
+
                     if old_base != last_old_base:
                         new_base_counter += 1
                         last_old_base = old_base
-                    
+
                     new_full_prefix = f"{new_base_counter}{suffix}"
-                    
+
                     # 1. 공종순서 업데이트 (버튼 위젯이 없는 경우에만 업데이트하여 버튼 유지)
                     if not self.gapji_table.cellWidget(r, self.GONGJONG_NUM_COL):
                         seq_item = QTableWidgetItem(new_full_prefix)
                         seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                         self.gapji_table.setItem(r, self.GONGJONG_NUM_COL, seq_item)
-                    
+
                     # 2. 공종명 업데이트 (번호. 명칭)
                     item.setText(f"{new_full_prefix}. {name}")
                 else:
@@ -1252,7 +1412,7 @@ class OutputDetailTab:
                     new_base_counter += 1
                     last_old_base = None
                     new_prefix = str(new_base_counter)
-                    
+
                     seq_item = QTableWidgetItem(new_prefix)
                     seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     self.gapji_table.setItem(r, self.GONGJONG_NUM_COL, seq_item)
@@ -1262,14 +1422,14 @@ class OutputDetailTab:
                 new_base_counter += 1
                 last_old_base = None
                 new_prefix = str(new_base_counter)
-                
+
                 seq_item = QTableWidgetItem(new_prefix)
                 seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.gapji_table.setItem(r, self.GONGJONG_NUM_COL, seq_item)
                 item.setText(f"{new_prefix}. {text}")
-                
+
         self.gapji_table.blockSignals(False)
-        print("[INFO] 공종 번호 재정리 완료") # 콘솔 로그로 대체
+        print("[INFO] 공종 번호 재정리 완료")  # 콘솔 로그로 대체
 
     def _update_project_name(self, name):
         """프로젝트명 업데이트"""
@@ -1278,27 +1438,38 @@ class OutputDetailTab:
     def _show_about_dialog(self):
         """[NEW] 도움말 - 프로그램 정보 표시"""
         from PyQt6.QtGui import QPixmap, QIcon
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QHBoxLayout, QPushButton
-        
+        from PyQt6.QtWidgets import (
+            QDialog,
+            QVBoxLayout,
+            QLabel,
+            QHBoxLayout,
+            QPushButton,
+        )
+
         dlg = QDialog(self.main_window)
         dlg.setWindowTitle("프로그램 정보 (About)")
         dlg.setFixedSize(400, 320)
         dlg.setStyleSheet("background-color: white; font-family: '새굴림';")
-        
+
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(30, 20, 30, 20)
         layout.setSpacing(15)
-        
+
         # 1. 아이콘 & 제목
         header_layout = QHBoxLayout()
         icon_label = QLabel()
         # [수정] 사용자 지정 로고 경로 적용
         icon_path = r"D:\오아시스\SANCHUL_Sheet_1\assets\icons\오아시스_로고01.png"
         if os.path.exists(icon_path):
-            pixmap = QPixmap(icon_path).scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pixmap = QPixmap(icon_path).scaled(
+                80,
+                80,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
             icon_label.setPixmap(pixmap)
         header_layout.addWidget(icon_label)
-        
+
         title_layout = QVBoxLayout()
         title_label = QLabel("오아시스 (OASIS)")
         title_label.setStyleSheet("font-size: 16pt; font-weight: bold; color: #004080;")
@@ -1309,14 +1480,14 @@ class OutputDetailTab:
         header_layout.addLayout(title_layout)
         header_layout.addStretch()
         layout.addLayout(header_layout)
-        
+
         # 구분선
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setFrameShadow(QFrame.Shadow.Sunken)
         line.setStyleSheet("background-color: #dee2e6;")
         layout.addWidget(line)
-        
+
         # 2. 상세 정보 (사용자 요청 정보로 수정)
         info_text = """
         <table style='width: 100%; font-size: 11pt; color: #333;'>
@@ -1330,9 +1501,9 @@ class OutputDetailTab:
         info_label.setStyleSheet("font-family: '새굴림';")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
-        
+
         layout.addStretch()
-        
+
         # 3. 닫기 버튼
         close_btn = QPushButton("확인")
         close_btn.setFixedSize(80, 30)
@@ -1345,12 +1516,12 @@ class OutputDetailTab:
             QPushButton:hover { background-color: #e9ecef; }
         """)
         close_btn.clicked.connect(dlg.accept)
-        
+
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         btn_layout.addWidget(close_btn)
         layout.addLayout(btn_layout)
-        
+
         dlg.exec()
 
     def _show_system_log(self):
@@ -1361,9 +1532,13 @@ class OutputDetailTab:
                 # Windows 기본 텍스트 편집기(메모장 등)로 열기
                 os.startfile(log_path)
             except Exception as e:
-                QMessageBox.warning(self.main_window, "오류", f"시스템 로그를 열 수 없습니다: {e}")
+                QMessageBox.warning(
+                    self.main_window, "오류", f"시스템 로그를 열 수 없습니다: {e}"
+                )
         else:
-            QMessageBox.information(self.main_window, "알림", "시스템 로그 파일이 존재하지 않습니다.")
+            QMessageBox.information(
+                self.main_window, "알림", "시스템 로그 파일이 존재하지 않습니다."
+            )
 
     def _log_system_event(self, msg):
         """시스템 이벤트를 디버그 로그에 기록 (나중에 SYSTEM_LOG.md 업데이트 참고용)"""

@@ -1,0 +1,235 @@
+{
+  "version": "1.0",
+  "description": "000. 기초작업 템플릿 (조명기구, 분전반)",
+  "gongjong": "000. 기초작업",
+  "eulji_items": [
+    {
+      "num": "1",
+      "gubun": "조명",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "조명기구 (4각BOX) TYPE-A",
+      "formula": "",
+      "total": "",
+      "unit": "@",
+      "remark": "조명기구조리 A-Type",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "조명기구", "qty": "1"},
+          {"name": "등보강(M-bar)", "qty": "1"},
+          {"name": "4각 아울렛박스", "qty": "1"},
+          {"name": "4각 박스커버", "qty": "1"},
+          {"name": "가요전선관 16c", "qty": "1.5"},
+          {"name": "가요콘 16c", "qty": "2"},
+          {"name": "HIV 2.5sq", "qty": "0.2*2+$L*2+0.2*2"}
+        ]
+      }
+    },
+    {
+      "num": "2",
+      "gubun": "조명",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "조명기구 (4각BOX) TYPE-B",
+      "formula": "",
+      "total": "",
+      "unit": "@",
+      "remark": "조명기구조리 B-Type",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "조명기구", "qty": "1"},
+          {"name": "등보강(M-bar)", "qty": "1"},
+          {"name": "4각 아울렛박스", "qty": "1"},
+          {"name": "4각 박스커버", "qty": "1"},
+          {"name": "가요전선관 16c", "qty": "1.5"},
+          {"name": "가요콘 16c", "qty": "2"},
+          {"name": "HIV 2.5sq", "qty": "0.2*2+$L*2+0.2*2"}
+        ]
+      }
+    },
+    {
+      "num": "3",
+      "gubun": "조명",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "조명기구 (4각BOX) TYPE-C",
+      "formula": "",
+      "total": "",
+      "unit": "@",
+      "remark": "조명기구조리 C-Type",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "조명기구", "qty": "1"},
+          {"name": "등보강(M-bar)", "qty": "1"},
+          {"name": "4각 아울렛박스", "qty": "1"},
+          {"name": "4각 박스커버", "qty": "1"},
+          {"name": "가요전선관 16c", "qty": "1.5"},
+          {"name": "가요콘 16c", "qty": "2"},
+          {"name": "HIV 2.5sq", "qty": "0.2*2+$L*2+0.2*2"}
+        ]
+      }
+    },
+    {
+      "num": "4",
+      "gubun": "조명",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "조명기구 (4각BOX) TYPE-D",
+      "formula": "",
+      "total": "",
+      "unit": "@",
+      "remark": "조명기구조리 D-Type",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "조명기구", "qty": "1"},
+          {"name": "등보강(M-bar)", "qty": "1"},
+          {"name": "4각 아울렛박스", "qty": "1"},
+          {"name": "4각 박스커버", "qty": "1"},
+          {"name": "가요전선관 16c", "qty": "1.5"},
+          {"name": "가요콘 16c", "qty": "2"},
+          {"name": "HIV 2.5sq", "qty": "0.2*2+$L*2+0.2*2"}
+        ]
+      }
+    },
+    {
+      "num": "5",
+      "gubun": "조명",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "조명기구 (8각BOX)",
+      "formula": "",
+      "total": "",
+      "unit": "@",
+      "remark": "8각 조명기구",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "조명기구(8각)", "qty": "1"},
+          {"name": "8각 아울렛박스", "qty": "1"},
+          {"name": "8각 박스커버", "qty": "1"},
+          {"name": "가요전선관 16c", "qty": "1.5"},
+          {"name": "가요콘 16c", "qty": "2"},
+          {"name": "HIV 2.5sq", "qty": "0.2*2+$L*2+0.2*2"}
+        ]
+      }
+    },
+    {
+      "num": "6",
+      "gubun": "조명",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "직관등(수은등) 400W",
+      "formula": "",
+      "total": "",
+      "unit": "@",
+      "remark": "고天井 등",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "직관등(수은등) 400W", "qty": "1"},
+          {"name": "등받이", "qty": "1"},
+          {"name": "4각 아울렛박스", "qty": "1"},
+          {"name": "4각 박스커버", "qty": "1"},
+          {"name": "가요전선관 16c", "qty": "1.5"},
+          {"name": "가요콘 16c", "qty": "2"},
+          {"name": "HIV 2.5sq", "qty": "0.2*2+$L*2+0.2*2"}
+        ]
+      }
+    },
+    {
+      "num": "7",
+      "gubun": "전열",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "분전반 (수작업용)",
+      "formula": "",
+      "total": "",
+      "unit": "식",
+      "remark": "분전반 수작업",
+      "unit_price": {
+        "enabled": false
+      }
+    },
+    {
+      "num": "8",
+      "gubun": "전열",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "분전반 (일위대가용)",
+      "formula": "",
+      "total": "",
+      "unit": "#",
+      "remark": "분전반 일위대가",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "분전반 외함", "qty": "1"},
+          {"name": "배선용 차단기 20A", "qty": "1"},
+          {"name": "배선용 차단기 30A", "qty": "1"},
+          {"name": "배선용 차단기 50A", "qty": "1"},
+          {"name": "접지극", "qty": "1"},
+          {"name": "내부배선", "qty": "1"}
+        ]
+      }
+    },
+    {
+      "num": "9",
+      "gubun": "전열",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "콘센트 (일반용)",
+      "formula": "",
+      "total": "",
+      "unit": "@",
+      "remark": "일반 콘센트",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "아울렛박스", "qty": "1"},
+          {"name": "오즈페어러그(일반)", "qty": "1"},
+          {"name": "가요전선관 16c", "qty": "1.5"},
+          {"name": "가요콘 16c", "qty": "2"},
+          {"name": "HIV 2.5sq", "qty": "$L*2+0.3"}
+        ]
+      }
+    },
+    {
+      "num": "10",
+      "gubun": "전열",
+      "from": "",
+      "to": "",
+      "circuit": "",
+      "item": "스위치 (1회로)",
+      "formula": "",
+      "total": "",
+      "unit": "@",
+      "remark": "벽스위치 1회로",
+      "unit_price": {
+        "enabled": true,
+        "items": [
+          {"name": "아울렛박스", "qty": "1"},
+          {"name": "와이퍼스위치(1종)", "qty": "1"},
+          {"name": "가요전선관 16c", "qty": "$L+0.3"},
+          {"name": "HIV 2.5sq", "qty": "$L+0.3"}
+        ]
+      }
+    }
+  ],
+  "gapji_defaults": {
+    "height": "3.0",
+    "ceiling": "1.5"
+  }
+}

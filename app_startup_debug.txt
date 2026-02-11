@@ -1,0 +1,8 @@
+=== OASIS Startup Debug ===
+Time: 2026-02-11 13:54:58.450011
+Python: C:\Users\KIMPHIL\AppData\Local\Programs\Python\Python314\python.exe
+CWD: D:\오아시스\SANCHUL_Sheet_1
+
+[INFO] Starting Application...
+[INFO] Starting event loop...
+[INFO] Event loop ended with code: 0
