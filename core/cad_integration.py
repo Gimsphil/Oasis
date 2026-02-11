@@ -464,3 +464,90 @@ if __name__ == "__main__":
 
     print("AutoCAD Integration Module")
     print("Install ezdxf: pip install ezdxf")
+
+
+def show_cad_import_dialog(parent=None, eulji_data: dict = None):
+    """
+    [GUI] CAD 파일 가져오기 대화상자 표시
+    Toolbar에서 호출용 래퍼 함수
+
+    Args:
+        parent: 부모 위젯 (QWidget)
+        eulji_data: 산출 데이터 딕셔너리 (현재 미사용)
+    """
+    try:
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+
+        # 파일 대화상자
+        file_path, _ = QFileDialog.getOpenFileName(
+            parent,
+            "CAD 파일 열기 (DXF/DWG)",
+            "",
+            "CAD Files (*.dxf *.dwg);;DXF Files (*.dxf);;DWG Files (*.dwg);;All Files (*.*)",
+        )
+
+        if file_path:
+            # 파일 확장자 확인
+            ext = file_path.lower().split(".")[-1]
+
+            if ext == "dwg":
+                QMessageBox.information(
+                    parent,
+                    "DWG 파일 지원",
+                    "DWG 파일은 AutoCAD가 설치된 경우에만 열 수 있습니다.\n\n"
+                    "DWG 파일을 DXF로 변환한 후 사용하거나,\n"
+                    "AutoCAD에서 '내보내기' → 'DXF' 형식으로 저장하세요.",
+                )
+                return
+
+            # DXF 파일 열기
+            extractor = CADExtractor()
+            success = extractor.open_file(file_path)
+
+            if success:
+                # 레이어 요약 표시
+                summary = extractor.get_layer_summary()
+
+                if summary:
+                    # 요약 정보 구성
+                    summary_text = "레이어별 객체 요약:\n\n"
+                    for item in summary[:10]:  # 최대 10개까지 표시
+                        summary_text += f"{item['layer']}: {item['entity_count']}개"
+
+                        if item["total_length"] > 0:
+                            summary_text += f", 길이: {item['total_length']:.2f}m"
+                        if item["total_area"] > 0:
+                            summary_text += f", 면적: {item['total_area']:.2f}㎡"
+
+                        summary_text += "\n"
+
+                    if len(summary) > 10:
+                        summary_text += f"\n... 외 {len(summary) - 10}개 레이어"
+
+                    QMessageBox.information(
+                        parent,
+                        "CAD 파일 로드 완료",
+                        f"파일: {file_path.split('/')[-1]}\n\n{summary_text}\n"
+                        "그림산출 팝업에서 레이어 매핑을 설정하여 산출 항목을 생성하세요.",
+                    )
+                else:
+                    QMessageBox.warning(
+                        parent,
+                        "경고",
+                        "CAD 파일에 인식 가능한 객체가 없습니다.\n"
+                        "레이어가 비어있거나 지원되지 않는 형식입니다.",
+                    )
+            else:
+                QMessageBox.warning(
+                    parent,
+                    "오류",
+                    "CAD 파일을 열 수 없습니다.\n"
+                    "ezdxf 라이브러리가 올바르게 설치되어 있는지 확인하세요.\n\n"
+                    "pip install ezdxf",
+                )
+
+    except ImportError:
+        print("[ERROR] PyQt6 미설치: GUI 대화상자를 사용할 수 없습니다.")
+    except Exception as e:
+        print(f"[ERROR] CAD 가져오기 대화상자 오류: {e}")
+        QMessageBox.critical(parent, "오류", f"CAD 파일 처리 중 오류 발생:\n{str(e)}")

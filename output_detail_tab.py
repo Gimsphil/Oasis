@@ -420,26 +420,99 @@ class OutputDetailTab:
             }
         """
 
-        for menu_name, shortcut_key in [
-            ("파일(F)", "F"),
-            ("편집(E)", "E"),
-            ("보기(V)", "V"),
-            ("도구(T)", "T"),
-            ("시스템로그(L)", "L"),
-            ("도움말(H)", "H"),
+        for menu_name, shortcut_key, callback_name in [
+            ("파일(F)", "F", None),
+            ("편집(E)", "E", None),
+            ("보기(V)", "V", None),
+            ("도구(T)", "T", None),
+            ("모듈(M)", "M", "_show_modules_menu"),
+            ("시스템로그(L)", "L", "_show_system_log"),
+            ("도움말(H)", "H", "_show_about_dialog"),
         ]:
             btn = QPushButton(menu_name)
             btn.setStyleSheet(menu_btn_style)
-            # [NEW] 시스템 로그 버튼 연결
-            if "시스템로그" in menu_name:
-                btn.clicked.connect(self._show_system_log)
-            # [NEW] 도움말 버튼 연결
-            elif "도움말" in menu_name:
-                btn.clicked.connect(self._show_about_dialog)
+            if callback_name and hasattr(self, callback_name):
+                btn.clicked.connect(getattr(self, callback_name))
             menu_layout.addWidget(btn)
 
         menu_layout.addStretch()
         header_main_layout.addWidget(menu_area)
+
+        # 0-1행: 모듈 툴바 (새로 추가)
+        toolbar_area = QWidget()
+        toolbar_area.setFixedHeight(40)
+        toolbar_area.setStyleSheet("""
+            QWidget {
+                background-color: #f8f9fa;
+                border-bottom: 1px solid #dee2e6;
+            }
+        """)
+        toolbar_layout = QHBoxLayout(toolbar_area)
+        toolbar_layout.setContentsMargins(5, 2, 5, 2)
+        toolbar_layout.setSpacing(5)
+
+        # 툴바 버튼 스타일
+        toolbar_btn_style = """
+            QPushButton {
+                background-color: #ffffff;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                padding: 4px 10px;
+                font-family: '새굴림';
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border-color: #adb5bd;
+            }
+            QPushButton:pressed {
+                background-color: #dee2e6;
+            }
+        """
+
+        # Phase별 툴바 버튼 구성
+        toolbar_buttons = [
+            # Phase 3: 집계/관리
+            ("소요자재", "material_summary", "material_summary_popup"),
+            ("일괄변경", "batch_tools", "batch_tools_popup"),
+            None,  # 구분선
+            # Phase 4: 출력/변환
+            ("견적변환", "estimate_convert", "estimate_options_popup"),
+            ("엑셀출력", "excel_export", "excel_exporter"),
+            ("산식검사", "formula_check", "formula_check_popup"),
+            None,  # 구분선
+            # Phase 5: 고급 기능
+            ("산출판", "output_board", "output_board_popup"),
+            ("간선산출", "cable_routing", "cable_routing_popup"),
+            ("설계변경", "design_change", "design_change_popup"),
+            None,  # 구분선
+            # Phase 6: 전문 기능
+            ("그림산출", "graphic_output", "graphic_output_popup"),
+            ("CAD연동", "cad_integration", "cad_integration"),
+        ]
+
+        for item in toolbar_buttons:
+            if item is None:
+                # 구분선
+                separator = QFrame()
+                separator.setFrameShape(QFrame.Shape.VLine)
+                separator.setFrameShadow(QFrame.Shadow.Sunken)
+                separator.setStyleSheet("color: #ced4da;")
+                toolbar_layout.addWidget(separator)
+            else:
+                btn_label, btn_name, module_name = item
+                btn = QPushButton(btn_label)
+                btn.setStyleSheet(toolbar_btn_style)
+                btn.setToolTip(f"{btn_label} 모듈 실행")
+                # 클릭 이벤트 연결
+                btn.clicked.connect(
+                    lambda checked, n=btn_name: self._on_toolbar_clicked(n)
+                )
+                toolbar_layout.addWidget(btn)
+
+        toolbar_layout.addStretch()
+        header_main_layout.addWidget(toolbar_area)
 
         # 1행: 현장명 (Project) + 우측에 공종 카테고리
         project_row_widget = QWidget()
@@ -1538,6 +1611,161 @@ class OutputDetailTab:
         else:
             QMessageBox.information(
                 self.main_window, "알림", "시스템 로그 파일이 존재하지 않습니다."
+            )
+
+    def _show_modules_menu(self):
+        """모듈 메뉴 버튼 클릭 - 드롭다운 메뉴 표시"""
+        # 간단한 메시지로 모듈 사용법 안내
+        QMessageBox.information(
+            self.main_window,
+            "모듈 메뉴",
+            "상단 툴바의 버튼을 사용하여 각 모듈을 실행하세요.\n\n"
+            "■ Phase 3: 집계/관리\n"
+            "  - 소요자재: 전체 공종 자재 집계\n"
+            "  - 일괄변경: 수량/재질 일괄 수정\n\n"
+            "■ Phase 4: 출력/변환\n"
+            "  - 견적변환: 산출 → 견적 내역서\n"
+            "  - 엑셀출력: 엑셀 파일 내보내기\n"
+            "  - 산식검사: 산출수식 오류 검사\n\n"
+            "■ Phase 5: 고급 기능\n"
+            "  - 산출판: 시각적 판서 형식\n"
+            "  - 간선산출: 케이블 경로별 관리\n"
+            "  - 설계변경: 수량/규격 변경 이력\n\n"
+            "■ Phase 6: 전문 기능\n"
+            "  - 그림산출: 도면에서 산출 선택\n"
+            "  - CAD연동: DXF/DWG 파일 연동",
+        )
+
+    def _on_toolbar_clicked(self, button_name):
+        """[Phase 1-6] 툴바 버튼 클릭 핸들러"""
+        print(f"[TOOLBAR] 버튼 클릭: {button_name}")
+
+        # �업 모듈 딕셔너리
+        popup_modules = {
+            # Phase 3: 집계/관리
+            "material_summary": {
+                "class": "MaterialSummaryPopup",
+                "module": "popups.material_summary_popup",
+                "title": "소요자재 집계",
+            },
+            "batch_tools": {
+                "class": "BatchToolsPopup",
+                "module": "popups.batch_tools_popup",
+                "title": "일괄 변경 도구",
+            },
+            # Phase 4: 출력/변환
+            "estimate_convert": {
+                "class": "EstimateOptionsPopup",
+                "module": "popups.estimate_options_popup",
+                "title": "견적 변환 옵션",
+            },
+            "excel_export": {
+                "class": None,
+                "module": "core.excel_exporter",
+                "function": "show_export_dialog",
+                "title": "엑셀 출력",
+            },
+            "formula_check": {
+                "class": "FormulaCheckPopup",
+                "module": "popups.formula_check_popup",
+                "title": "산식 오류 검사",
+            },
+            # Phase 5: 고급 기능
+            "output_board": {
+                "class": "OutputBoardPopup",
+                "module": "popups.output_board_popup",
+                "title": "산출판",
+            },
+            "cable_routing": {
+                "class": "CableRoutingPopup",
+                "module": "popups.cable_routing_popup",
+                "title": "간선 산출판",
+            },
+            "design_change": {
+                "class": "DesignChangePopup",
+                "module": "popups.design_change_popup",
+                "title": "설계변경 관리",
+            },
+            # Phase 6: 전문 기능
+            "graphic_output": {
+                "class": "GraphicOutputPopup",
+                "module": "popups.graphic_output_popup",
+                "title": "그림산출",
+            },
+            "cad_integration": {
+                "class": None,
+                "module": "core.cad_integration",
+                "function": "show_cad_import_dialog",
+                "title": "CAD 파일 가져오기",
+            },
+            "cad_integration": {
+                "class": None,
+                "module": "core.cad_integration",
+                "function": "show_cad_import_dialog",
+                "title": "CAD 파일 가져오기",
+            },
+        }
+
+        if button_name not in popup_modules:
+            QMessageBox.warning(
+                self.main_window, "오류", f"알 수 없는 버튼: {button_name}"
+            )
+            return
+
+        module_info = popup_modules[button_name]
+        module_name = module_info["module"]
+        class_name = module_info.get("class")
+        func_name = module_info.get("function")
+        title = module_info["title"]
+
+        try:
+            # 모듈 임포트
+            if "." in module_name:
+                parts = module_name.rsplit(".", 1)
+                module = __import__(parts[0], fromlist=[parts[1]])
+                submodule = getattr(module, parts[1])
+            else:
+                submodule = __import__(module_name)
+
+            # 함수 또는 클래스 실행
+            if func_name:
+                # 함수인 경우 (모달ess 실행)
+                if hasattr(submodule, func_name):
+                    func = getattr(submodule, func_name)
+                    func(parent=self.main_window, eulji_data=self.eulji_data)
+                else:
+                    QMessageBox.warning(
+                        self.main_window,
+                        "오류",
+                        f"함수를 찾을 수 없습니다: {func_name}",
+                    )
+            elif class_name:
+                # 클래스인 경우 (모달ダイア로그)
+                if hasattr(submodule, class_name):
+                    dlg_class = getattr(submodule, class_name)
+                    dlg = dlg_class(self.main_window, self.eulji_data)
+                    dlg.setWindowTitle(title)
+                    dlg.exec()
+                else:
+                    QMessageBox.warning(
+                        self.main_window,
+                        "오류",
+                        f"클래스를 찾을 수 없습니다: {class_name}",
+                    )
+            else:
+                QMessageBox.information(
+                    self.main_window, "알림", f"{title} 모듈이 준비중입니다."
+                )
+
+        except ImportError as e:
+            QMessageBox.warning(
+                self.main_window,
+                "모듈 오류",
+                f"{title} 모듈을 로드할 수 없습니다.\n\n오류: {e}\n\nrequirements.txt의 의존성을 확인하세요.",
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self.main_window, "실행 오류", f"{title} 실행 중 오류 발생:\n\n{str(e)}"
             )
 
     def _log_system_event(self, msg):

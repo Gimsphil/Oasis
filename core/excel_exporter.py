@@ -293,6 +293,49 @@ def export_estimate_to_excel(estimate_data: dict, output_path: str):
         return False
 
 
+def show_export_dialog(parent=None, eulji_data: dict = None):
+    """
+    [GUI] 엑셀 내보내기 대화상자 표시
+    Toolbar에서 호출용 래퍼 함수
+
+    Args:
+        parent: 부모 위젯 (QWidget)
+        eulji_data: 산출 데이터 딕셔너리
+    """
+    try:
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+
+        if not OPENPYXL_AVAILABLE:
+            QMessageBox.warning(
+                parent,
+                "오류",
+                "openpyxl이 설치되지 않았습니다.\npip install openpyxl을 실행하세요.",
+            )
+            return
+
+        if not eulji_data or not isinstance(eulji_data, dict):
+            eulji_data = {}
+
+        # 파일 대화상자
+        file_path, _ = QFileDialog.getSaveFileName(
+            parent, "엑셀 파일로 내보내기", "산출내역.xlsx", "Excel Files (*.xlsx)"
+        )
+
+        if file_path:
+            success = export_to_excel(eulji_data, file_path, include_unit_price=True)
+            if success:
+                QMessageBox.information(
+                    parent, "완료", f"엑셀 파일이 저장되었습니다.\n{file_path}"
+                )
+            else:
+                QMessageBox.warning(parent, "오류", "엑셀 내보내기에 실패했습니다.")
+
+    except ImportError:
+        print("[ERROR] PyQt6 미설치: GUI 대화상자를 사용할 수 없습니다.")
+    except Exception as e:
+        print(f"[ERROR] 엑셀 내보내기 대화상자 오류: {e}")
+
+
 # ============== 테스트 ==============
 if __name__ == "__main__":
     # 테스트 데이터
