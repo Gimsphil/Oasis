@@ -32,6 +32,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
+# 그리드 스타일 설정을 위한 공통 모듈 임포트
+from utils.column_settings import (
+    setup_common_table,
+    DEFAULT_ROWS,
+    DEFAULT_ROW_HEIGHT,
+    HEADER_FONT_SIZE,
+)
+
 
 class CableRoutingPopup(QDialog):
     """
@@ -76,18 +84,21 @@ class CableRoutingPopup(QDialog):
         left_layout.addWidget(self.route_tree)
         splitter.addWidget(left_frame)
 
-        # 우측: 간선 상세내역
+        # 우측: 간선 상세내역 테이블 - 그리드 스타일 적용
         right_frame = QFrame()
         right_layout = QVBoxLayout(right_frame)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
         self.cable_table = QTableWidget()
-        self.cable_table.setColumnCount(5)
-        self.cable_table.setHorizontalHeaderLabels(
-            ["회로", "시작점", "종료점", "규격", "수량(m)"]
-        )
-        self.cable_table.horizontalHeader().setStretchLastSection(True)
-        self.cable_table.setAlternatingRowColors(True)
+        cable_columns = ["회로", "시작점", "종료점", "규격", "수량(m)"]
+        cable_widths = {
+            "회로": 100,
+            "시작점": 120,
+            "종료점": 120,
+            "규격": 80,
+            "수량(m)": 70,
+        }
+        setup_common_table(self.cable_table, cable_columns, cable_widths)
 
         right_layout.addWidget(QLabel("<b>간선 상세내역</b>"))
         right_layout.addWidget(self.cable_table)

@@ -30,6 +30,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 
+# 그리드 스타일 설정을 위한 공통 모듈 임포트
+from utils.column_settings import (
+    setup_common_table,
+    DEFAULT_ROWS,
+    DEFAULT_ROW_HEIGHT,
+    HEADER_FONT_SIZE,
+)
+
 
 class OutputBoardPopup(QDialog):
     """
@@ -65,31 +73,31 @@ class OutputBoardPopup(QDialog):
         left_layout = QVBoxLayout(left_frame)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
+        # 산출판 테이블 - 그리드 스타일 적용
         self.board_table = QTableWidget()
-        self.board_table.setColumnCount(5)
-        self.board_table.setHorizontalHeaderLabels(
-            ["순번", "산출항목", "규격", "수량", "비고"]
-        )
-        self.board_table.horizontalHeader().setStretchLastSection(True)
-        self.board_table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows
-        )
-        self.board_table.setAlternatingRowColors(True)
+        board_columns = ["순번", "산출항목", "규격", "수량", "비고"]
+        board_widths = {
+            "순번": 40,
+            "산출항목": 200,
+            "규격": 120,
+            "수량": 60,
+            "비고": 100,
+        }
+        setup_common_table(self.board_table, board_columns, board_widths)
 
         left_layout.addWidget(QLabel("<b>산출판</b>"))
         left_layout.addWidget(self.board_table)
         splitter.addWidget(left_frame)
 
-        # 우측: 상세내역
+        # 우측: 상세내역 테이블 - 그리드 스타일 적용
         right_frame = QFrame()
         right_layout = QVBoxLayout(right_frame)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
         self.detail_table = QTableWidget()
-        self.detail_table.setColumnCount(4)
-        self.detail_table.setHorizontalHeaderLabels(["항목", "규격", "수량", "단위"])
-        self.detail_table.horizontalHeader().setStretchLastSection(True)
-        self.detail_table.setAlternatingRowColors(True)
+        detail_columns = ["항목", "규격", "수량", "단위"]
+        detail_widths = {"항목": 150, "규격": 100, "수량": 60, "단위": 50}
+        setup_common_table(self.detail_table, detail_columns, detail_widths)
         self.detail_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
         right_layout.addWidget(QLabel("<b>상세내역</b>"))
