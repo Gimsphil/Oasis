@@ -117,7 +117,7 @@ class CalculationUnitPricePopup(QDialog):
         self.save_timer.timeout.connect(self._save_data)
 
         self.setWindowTitle("산출일위표")
-        self.setMinimumSize(600, 400)
+        self.setMinimumSize(700, 600)  # 520 -> 600 (15행 가시성 확보)
 
         # 프레임 스타일 설정
         self.setStyleSheet("""
@@ -131,9 +131,9 @@ class CalculationUnitPricePopup(QDialog):
             }
         """)
 
-        # 외곽 테두리용 외부 레이아웃
+        # 외곽 테두리용 외부 레이아웃 (타이틀은 아래 header_frame으로 이동)
         outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setContentsMargins(10, 10, 10, 10)
         outer_layout.setSpacing(0)
 
         # 외곽 테두리 프레임 (전체 콘텐츠를 감쌈)
@@ -151,9 +151,9 @@ class CalculationUnitPricePopup(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 1. 헤더 영역 (타이틀 및 목록 버튼)
+        # 1. 헤더 영역 (회색 배경 - 타이틀 제거하고 목록 버튼만 우측 배치)
         self.header_frame = QFrame()
-        self.header_frame.setFixedHeight(24)
+        self.header_frame.setFixedHeight(26)
         self.header_frame.setStyleSheet("""
             background-color: #e1e1e1;
             border: none;
@@ -162,9 +162,15 @@ class CalculationUnitPricePopup(QDialog):
         header_layout = QHBoxLayout(self.header_frame)
         header_layout.setContentsMargins(8, 0, 8, 0)
 
-        self.lbl_title = QLabel("산출일위표")
-        self.lbl_title.setObjectName("TitleLabel")
-        header_layout.addWidget(self.lbl_title)
+        # 내부 타이틀 ("산출일위표") 추가
+        self.lbl_header_title = QLabel("산출일위표")
+        self.lbl_header_title.setStyleSheet("""
+            font-family: '새굴림';
+            font-size: 10pt;
+            font-weight: bold;
+            color: #444;
+        """)
+        header_layout.addWidget(self.lbl_header_title)
 
         header_layout.addStretch()
 
@@ -216,6 +222,7 @@ class CalculationUnitPricePopup(QDialog):
         for i, name in enumerate(UNIT_PRICE_COL_NAMES):
             key = list(UNIT_PRICE_COL_WIDTHS.keys())[i]
             self.table.setColumnWidth(i, UNIT_PRICE_COL_WIDTHS[key])
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
 
         layout.addWidget(self.table)
 
@@ -239,13 +246,12 @@ class CalculationUnitPricePopup(QDialog):
         # [NEW] 셀 내용 변경 시 계산 연동
         self.table.cellChanged.connect(self._on_unit_price_cell_changed)
 
-        # [NEW] 단위수량 컬럼 및 단위계 컬럼 델리게이트 조정 (숫자 형식)
+        # [NEW] 단위계 컬럼만 수치 델리게이트 적용 (단위수식은 수식 입력 허용)
         from utils.column_settings import NumericDelegate, CenterAlignmentDelegate
 
         num_delegate = NumericDelegate(
-            self.table, [UNIT_PRICE_COLS["UNIT_QTY"], UNIT_PRICE_COLS["UNIT_TOTAL"]]
+            self.table, [UNIT_PRICE_COLS["UNIT_TOTAL"]]
         )
-        self.table.setItemDelegateForColumn(UNIT_PRICE_COLS["UNIT_QTY"], num_delegate)
         self.table.setItemDelegateForColumn(UNIT_PRICE_COLS["UNIT_TOTAL"], num_delegate)
 
         # [NEW] 마커 컬럼은 중앙 정렬
@@ -1093,7 +1099,7 @@ class CalculationUnitPricePopup(QDialog):
                             self.table.insertRow(row)
                             self.table.setRowHeight(row, UNIT_PRICE_ROW_HEIGHT)
 
-                            # 데이터 채우기 (MARK, LIST, UNIT_QTY)
+                            # 데이터 채우기 (MARK, LIST, UNIT_FORMULA)
                             mark_text = str(row_data.get("mark", ""))
                             mark_item = QTableWidgetItem(mark_text)
                             mark_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1116,14 +1122,22 @@ class CalculationUnitPricePopup(QDialog):
                             )
                             self.table.setItem(
                                 row,
-                                self.UNIT_PRICE_COLS["UNIT_QTY"],
+                                self.UNIT_PRICE_COLS["UNIT_FORMULA"],
                                 QTableWidgetItem(str(row_data.get("qty", ""))),
                             )
 
                             # 단위계 계산 (blockSignals 상태이므로 직접 호출)
                             self._update_row_total(row)
+
+                        # [NEW] 데이터 로드 후에도 최소 30행 보장
+                        current_rows = self.table.rowCount()
+                        if current_rows < 30:
+                            for row in range(current_rows, 30):
+                                self.add_row()
+
                         loaded = True
-                        log_msg += f"  -> Success: {len(data)} rows loaded.\n"
+                        self.table.setShowGrid(True)
+                        log_msg += f"  -> Success: {len(data)} rows loaded (Total 30 rows ensured).\n"
                 except Exception as e:
                     log_msg += f"  -> Error: {e}\n"
 
@@ -1138,7 +1152,7 @@ class CalculationUnitPricePopup(QDialog):
                         )
                         # [FIX] 단위수량 기본값 1 설정 (사용자 요청)
                         self.table.setItem(
-                            0, self.UNIT_PRICE_COLS["UNIT_QTY"], QTableWidgetItem("1")
+                            0, self.UNIT_PRICE_COLS["UNIT_FORMULA"], QTableWidgetItem("1")
                         )
                         # 단위계 즉시 계산 유도
                         self._update_row_total(0)
@@ -1177,7 +1191,7 @@ class CalculationUnitPricePopup(QDialog):
             for r in range(self.table.rowCount()):
                 mark_item = self.table.item(r, self.UNIT_PRICE_COLS["MARK"])
                 list_item = self.table.item(r, self.UNIT_PRICE_COLS["LIST"])
-                qty_item = self.table.item(r, self.UNIT_PRICE_COLS["UNIT_QTY"])
+                qty_item = self.table.item(r, self.UNIT_PRICE_COLS["UNIT_FORMULA"])
 
                 mark_text = mark_item.text().strip() if mark_item else ""
                 list_text = list_item.text().strip() if list_item else ""
@@ -1245,7 +1259,7 @@ class CalculationUnitPricePopup(QDialog):
 
     def _on_unit_price_cell_changed(self, row, col):
         """셀 데이터 변경 시 처리 (단위수량 변경 시 해당 행의 단위계 계산 및 부모 동기화)"""
-        if col == self.UNIT_PRICE_COLS["UNIT_QTY"]:
+        if col == self.UNIT_PRICE_COLS["UNIT_FORMULA"]:
             self._update_row_total(row)
 
         # 15행 초과 경고 (데이터가 있는 행만 카운트)
@@ -1264,7 +1278,7 @@ class CalculationUnitPricePopup(QDialog):
     def _update_row_total(self, row):
         """특정 행의 단위수량 수식을 계산하여 단위계 컬럼에 출력"""
         try:
-            qty_item = self.table.item(row, self.UNIT_PRICE_COLS["UNIT_QTY"])
+            qty_item = self.table.item(row, self.UNIT_PRICE_COLS["UNIT_FORMULA"])
             if not qty_item:
                 return
 
@@ -1307,7 +1321,7 @@ class CalculationUnitPricePopup(QDialog):
             first_row_text = ""
             for r in range(self.table.rowCount()):
                 list_item = self.table.item(r, self.UNIT_PRICE_COLS["LIST"])
-                qty_item = self.table.item(r, self.UNIT_PRICE_COLS["UNIT_QTY"])
+                qty_item = self.table.item(r, self.UNIT_PRICE_COLS["UNIT_FORMULA"])
                 list_text = list_item.text().strip() if list_item else ""
                 qty_text = qty_item.text().strip() if qty_item else ""
                 if list_text or qty_text:

@@ -21,3 +21,9 @@ pytz>=2022.1
 
 # CAD 연동 (Phase 6)
 ezdxf>=0.18.0  # DXF/DWG 파일 파싱
+
+# OCR (이미지 텍스트 인식)
+pytesseract>=0.3.10          # OCR 엔진
+pdf2image>=1.16.3            # PDF → 이미지 변환
+Pillow>=9.5.0                # 이미지 처리
+opencv-python>=4.7.0         # 이미지 전처리 (선택)

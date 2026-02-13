@@ -88,16 +88,16 @@ class LightingPowerDelegate(CleanStyleDelegate):
 
 class LightingPowerPopup(QDialog):
     """
-    전등/전열 DB 연동 팝업창 (2분할 패널)
-    세부산출조서
+    전등/전열 DB 연동 팝업창 (산출목록 패널만 표시)
+    세부산출조서 — 산출일위 패널은 별도 산출일위표 팝업(CalculationUnitPricePopup)으로 분리됨
     """
 
     def __init__(self, parent=None, item_name="", parent_tab=None):
         super().__init__(parent)
-        self.setWindowTitle(f"세부산출조서 - {item_name}")
+        self.setWindowTitle("산출조서목록")
         self.setMinimumSize(
-            1192, 750
-        )  # 창 너비 확장 (단위수식 +30px 추가 확장, 총 +62px)
+            720, 850
+        )  # 너비 확대하여 3컬럼 가독성 확보 (650 -> 720)
         self.db_path = r"D:\오아시스\산출목록\조명기구타입.db"
         self.ref_db_path = r"D:\오아시스\data\자료사전.db"
         self.reference_codes = set()  # 자료사전 코드 매칭용
@@ -243,48 +243,44 @@ class LightingPowerPopup(QDialog):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # 중앙 2분할 스플리터
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-
-        # [패널 1] 왼쪽: 산출목록
-        left_panel = QFrame()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-
-        left_title = QLabel("산출목록")
-        left_title.setStyleSheet("""
-            background-color: #f8f9fa;
-            padding: 4px 8px;
-            border: 1px solid #ced4da;
+        # [REFACTOR] 산출조서목록 타이틀 추가
+        self.lbl_master_title = QLabel("산출조서목록")
+        self.lbl_master_title.setStyleSheet("""
             font-family: '새굴림';
             font-size: 11pt;
             font-weight: bold;
-            color: #495057;
+            color: #333;
+            margin-bottom: 2px;
         """)
-        left_layout.addWidget(left_title)
+        main_layout.addWidget(self.lbl_master_title)
 
         self.master_table = QTableWidget()
-        self.master_table.setColumnCount(3)  # 번호 컬럼 삭제
+        self.master_table.setColumnCount(3)
         self.master_table.setHorizontalHeaderLabels(
             ["타입별 조명기구", "구분", "산출수식"]
         )
 
         self.master_table.verticalHeader().setDefaultAlignment(
             Qt.AlignmentFlag.AlignCenter
-        )  # 세로 헤더 중앙 정렬
+        )
         self.master_table.verticalHeader().setFont(
             QFont("새굴림", 11)
-        )  # 세로 헤더 폰트 설정 (헤더는 새굴림 적용)
+        )
         self.master_table.verticalHeader().setDefaultSectionSize(
             22
-        )  # 행 높이 22px 설정
+        )
         self.master_table.verticalHeader().setFixedWidth(
             15
-        )  # [수정] 헤더 너비를 15px로 더 축소 (10% 수준으로 극소화)
+        )
         header = self.master_table.horizontalHeader()
+        header.setFixedHeight(26)
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
 
-        # [NEW] 헤더 클릭 선택 기능을 위해 SelectionBehavior를 아이템 단위로 변경하고 다중 선택 허용
+        # 컬럼 너비 복구 및 최적화
+        self.master_table.setColumnWidth(0, 250)  # 180 -> 250 (텍스트 잘림 방지)
+        self.master_table.setColumnWidth(1, 40)   # 45 -> 40 (3글자폭 최적화)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+
         self.master_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectItems
         )
@@ -292,14 +288,12 @@ class LightingPowerPopup(QDialog):
             QAbstractItemView.SelectionMode.ExtendedSelection
         )
 
-        # [NEW] 헤더 클릭 시 행/열 전체 선택 연결
         self.master_table.horizontalHeader().sectionClicked.connect(
             self.master_table.selectColumn
         )
         self.master_table.verticalHeader().sectionClicked.connect(
             self.master_table.selectRow
         )
-        # 다양한 입력 방식 허용 (클릭은 itemClicked에서 수동 처리)
         self.master_table.setEditTriggers(
             QTableWidget.EditTrigger.DoubleClicked
             | QTableWidget.EditTrigger.AnyKeyPressed
@@ -307,14 +301,12 @@ class LightingPowerPopup(QDialog):
         self.master_table.setFont(QFont("새굴림", 11))
         self.master_table.horizontalHeader().setFont(
             QFont("새굴림", 11)
-        )  # 헤더 폰트 (헤더는 새굴림 적용)
+        )
 
-        # [STYLE] 공통 스타일 적용 (무채색 통일)
         from utils.column_settings import setup_common_table
 
         setup_common_table(self.master_table, ["타입별 조명기구", "구분", "산출수식"])
 
-        # [NEW] 파란색 잔상 원천 차단 (팔레트 투명화 + 데리게이트)
         m_palette = self.master_table.palette()
         m_palette.setColor(
             QPalette.ColorRole.Highlight, QColor(Qt.GlobalColor.transparent)
@@ -327,201 +319,241 @@ class LightingPowerPopup(QDialog):
         self.master_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.master_table.itemClicked.connect(self._on_master_item_clicked)
 
-        left_layout.addWidget(self.master_table)
+        main_layout.addWidget(self.master_table)
 
-        # [패널 2] 오른쪽: 산출일위
-        right_panel = QFrame()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        # ── 산출일위 팝업 다이얼로그 (산출수식 클릭 시 표시) ──
+        self._detail_popup = QDialog(self)
+        self._detail_popup.setWindowTitle("산출일위표")
+        self._detail_popup.setMinimumSize(700, 600)  # 520 -> 600 (15행 가시성 확보)
+        
+        # 외곽 레이아웃 (타이틀 제거 - 아래 header_frame으로 이동)
+        outer_popup_layout = QVBoxLayout(self._detail_popup)
+        outer_popup_layout.setContentsMargins(10, 10, 10, 10)
+        outer_popup_layout.setSpacing(0)
 
-        # 산출일위 헤더 영역 (레이블 + 매칭확인 버튼)
-        right_header = QWidget()
-        right_header_layout = QHBoxLayout(right_header)
-        right_header_layout.setContentsMargins(0, 0, 0, 0)
-        right_header_layout.setSpacing(5)
+        # 1. 외곽 테두리 프레임 (BorderFrame)
+        self.detail_border_frame = QFrame()
+        self.detail_border_frame.setObjectName("BorderFrame")
+        self.detail_border_frame.setStyleSheet("""
+            QFrame#BorderFrame {
+                background-color: #f8f9fa;
+                border: 2px solid #505050;
+            }
+        """)
+        outer_popup_layout.addWidget(self.detail_border_frame)
 
-        right_title = QLabel("산출일위")
-        right_title.setStyleSheet("""
-            background-color: #f8f9fa;
-            padding: 4px 8px;
-            border: 1px solid #ced4da;
+        detail_popup_layout = QVBoxLayout(self.detail_border_frame)
+        detail_popup_layout.setContentsMargins(0, 0, 0, 0)
+        detail_popup_layout.setSpacing(0)
+
+        # 2. 헤더 영역 (회색 배경 - 타이틀 제거하고 목록 버튼만 우측 배치)
+        self.detail_header_frame = QFrame()
+        self.detail_header_frame.setFixedHeight(26) # 높이 소폭 조정
+        self.detail_header_frame.setStyleSheet("""
+            background-color: #e1e1e1;
+            border: none;
+            border-bottom: 1px solid #707070;
+        """)
+        detail_header_layout = QHBoxLayout(self.detail_header_frame)
+        detail_header_layout.setContentsMargins(8, 0, 8, 0)
+
+        # 내부 타이틀 ("산출일위표(전등)") 추가
+        self.lbl_detail_header_title = QLabel("산출일위표(전등)")
+        self.lbl_detail_header_title.setStyleSheet("""
             font-family: '새굴림';
-            font-size: 11pt;
+            font-size: 10pt;
             font-weight: bold;
-            color: #495057;
+            color: #444;
         """)
-        right_header_layout.addWidget(right_title)
+        detail_header_layout.addWidget(self.lbl_detail_header_title)
+        
+        detail_header_layout.addStretch()
 
-        right_header_layout.addStretch()
-
-        # 매칭확인 버튼
-        self.verify_match_btn = QPushButton("매칭확인")
-        self.verify_match_btn.setFixedSize(80, 26)
-        self.verify_match_btn.setFont(QFont("새굴림", 10))
-        self.verify_match_btn.setStyleSheet("""
+        self.btn_list = QPushButton("목록")
+        self.btn_list.setFixedSize(60, 20)
+        self.btn_list.setStyleSheet("""
             QPushButton {
-                background-color: #e9ecef;
-                border: 1px solid #adb5bd;
-                border-radius: 3px;
-                color: #495057;
+                background-color: #f0f0f0;
+                border: 1px solid #999;
+                font-family: '새굴림';
+                font-size: 9pt;
             }
-            QPushButton:hover {
-                background-color: #dee2e6;
-            }
-            QPushButton:pressed {
-                background-color: #ced4da;
-            }
+            QPushButton:hover { background-color: #e0e0e0; }
         """)
-        self.verify_match_btn.clicked.connect(self._on_verify_match_clicked)
-        right_header_layout.addWidget(self.verify_match_btn)
+        self.btn_list.clicked.connect(self._show_reference_db_popup)
+        detail_header_layout.addWidget(self.btn_list)
+        detail_popup_layout.addWidget(self.detail_header_frame)
 
-        # [NEW] 저장 옵션 라디오 버튼
-        save_option_frame = QFrame()
-        save_option_layout = QHBoxLayout(save_option_frame)
-        save_option_layout.setContentsMargins(10, 0, 0, 0)
-        save_option_layout.setSpacing(5)
+        # 3. 요약 정보 (흰색 배경)
+        self.detail_info_frame = QFrame()
+        self.detail_info_frame.setFixedHeight(28)
+        self.detail_info_frame.setStyleSheet(
+            "background-color: #fff; border: none; border-bottom: 1px solid #ccc;"
+        )
+        detail_info_layout = QHBoxLayout(self.detail_info_frame)
+        detail_info_layout.setContentsMargins(8, 0, 8, 0)
 
-        self.save_option_group = QButtonGroup(self)
+        self.lbl_item_name_detail = QLabel("산출일위목록: -")
+        self.lbl_item_name_detail.setStyleSheet(
+            "font-family: '굴림체'; font-size: 10pt; font-weight: bold; color: #333;"
+        )
+        detail_info_layout.addWidget(self.lbl_item_name_detail)
+        detail_info_layout.addStretch()
 
-        self.save_to_original_rb = QRadioButton("원본저장")
-        self.save_to_original_rb.setFont(QFont("새굴림", 9))
-        self.save_to_original_rb.setChecked(True)  # 기본값: 원본 저장
-        self.save_option_group.addButton(self.save_to_original_rb, 0)
-        save_option_layout.addWidget(self.save_to_original_rb)
+        detail_popup_layout.addWidget(self.detail_info_frame)
 
-        self.save_to_project_rb = QRadioButton("프로젝트만")
-        self.save_to_project_rb.setFont(QFont("새굴림", 9))
-        self.save_option_group.addButton(self.save_to_project_rb, 1)
-        save_option_layout.addWidget(self.save_to_project_rb)
-
-        right_header_layout.addWidget(save_option_frame)
-
-        right_layout.addWidget(right_header)
-
+        # 4. detail_table 생성 및 배치
         self.detail_table = QTableWidget()
-        self.detail_table.setColumnCount(5)  # 번호 컬럼 삭제
+        self.detail_table.setColumnCount(5)
         self.detail_table.setHorizontalHeaderLabels(
-            ["W", "CODE", "산출목록", "단위수식", "계"]
+            ["W", "CODE", "산출일위목록", "단위수식", "계"]
         )
-
-        # 세로 헤더 중앙 정렬 및 폰트
-        self.detail_table.verticalHeader().setDefaultAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
+        self.detail_table.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
         self.detail_table.verticalHeader().setFont(QFont("새굴림", 11))
-        self.detail_table.verticalHeader().setDefaultSectionSize(
-            22
-        )  # 행 높이 22px 설정
-        self.detail_table.verticalHeader().setFixedWidth(
-            15
-        )  # [수정] 헤더 너비를 15px로 더 축소 (10% 수준으로 극소화)
-
-        # 헤더 폰트 및 설정
+        self.detail_table.verticalHeader().setDefaultSectionSize(22)
+        self.detail_table.verticalHeader().setFixedWidth(15)
         self.detail_table.setFont(QFont("새굴림", 11))
-        self.detail_table.horizontalHeader().setFont(
-            QFont("새굴림", 11)
-        )  # 헤더 폰트 (헤더는 새굴림 적용)
+        self.detail_table.horizontalHeader().setFont(QFont("새굴림", 11))
 
-        # 헤더 너비 수동 조정
         d_header = self.detail_table.horizontalHeader()
         d_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.detail_table.setColumnWidth(0, 50)  # W (마커 포함)
-        self.detail_table.setColumnWidth(1, 110)  # CODE (11자)
-        self.detail_table.setColumnWidth(2, 230)  # 산출목록
-        d_header.setSectionResizeMode(
-            3, QHeaderView.ResizeMode.Stretch
-        )  # 단위수식 (여전히 자리가 남으면 확장)
-        self.detail_table.setColumnWidth(4, 45)  # 계 (50% 축소: 90 -> 45)
-
-        self.detail_table.setFont(QFont("새굴림", 11))
-
-        # [STYLE] 공통 스타일 적용 (무채색 통일)
-        from utils.column_settings import setup_common_table
+        self.detail_table.setColumnWidth(0, 35)
+        self.detail_table.setColumnWidth(1, 100)
+        self.detail_table.setColumnWidth(2, 300)
+        d_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.detail_table.setColumnWidth(4, 55)
 
         setup_common_table(
-            self.detail_table, ["W", "CODE", "산출목록", "단위수식", "계"]
+            self.detail_table, ["W", "CODE", "산출일위목록", "단위수식", "계"]
         )
 
-        # [NEW] 파란색 잔상 원천 차단 (팔레트 투명화 + 데리게이트)
         d_palette = self.detail_table.palette()
-        d_palette.setColor(
-            QPalette.ColorRole.Highlight, QColor(Qt.GlobalColor.transparent)
-        )
-        d_palette.setColor(
-            QPalette.ColorRole.HighlightedText, d_palette.color(QPalette.ColorRole.Text)
-        )
+        d_palette.setColor(QPalette.ColorRole.Highlight, QColor(Qt.GlobalColor.transparent))
+        d_palette.setColor(QPalette.ColorRole.HighlightedText, d_palette.color(QPalette.ColorRole.Text))
         self.detail_table.setPalette(d_palette)
-        # [NEW] 팝업 전용 델리게이트 적용 (Tab 키 가로채기용)
-        self.detail_table.setItemDelegate(
-            LightingPowerDelegate(self.detail_table, self)
-        )
+        self.detail_table.setItemDelegate(LightingPowerDelegate(self.detail_table, self))
         self.detail_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.detail_table.setEditTriggers(
-            QTableWidget.EditTrigger.DoubleClicked
-        )  # 더블 클릭 시 편집 활성화
-        self.detail_table.itemChanged.connect(self._on_detail_item_changed)  # 변경 감지
-
-        # [PHASE 3-5] 드래그 앤 드롭 설정
+        self.detail_table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
+        self.detail_table.itemChanged.connect(self._on_detail_item_changed)
+        self.detail_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        self.detail_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.detail_table.setAcceptDrops(True)
         self.detail_table.setDefaultDropAction(Qt.DropAction.CopyAction)
+        
+        detail_popup_layout.addWidget(self.detail_table)
+        
+        # ── 5. 하단 메뉴 바 (산출내역서 일위표 규격 적용) ──
+        bottom_menu_frame = QFrame()
+        bottom_menu_frame.setObjectName("BottomMenu")
+        bottom_menu_frame.setFixedHeight(105)
+        bottom_menu_frame.setStyleSheet("""
+            QFrame#BottomMenu {
+                background-color: #e8e8e8;
+                border: none;
+                border-top: 1px solid #999;
+            }
+        """)
 
-        # [NEW] 헤더 클릭 선택 기능을 위해 SelectionBehavior를 아이템 단위로 변경하고 다중 선택 허용
-        self.detail_table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectItems
-        )
-        self.detail_table.setSelectionMode(
-            QAbstractItemView.SelectionMode.ExtendedSelection
-        )
+        menu_layout = QVBoxLayout(bottom_menu_frame)
+        menu_layout.setContentsMargins(12, 6, 12, 6)
+        menu_layout.setSpacing(6)
 
-        # [NEW] 헤더 클릭 시 행/열 전체 선택 연결
-        self.detail_table.horizontalHeader().sectionClicked.connect(
-            self.detail_table.selectColumn
-        )
-        self.detail_table.verticalHeader().sectionClicked.connect(
-            self.detail_table.selectRow
-        )
+        # 버튼 스타일
+        btn_style = """
+            QPushButton {
+                background-color: #f0f0f0;
+                border: 1px solid #aaa;
+                padding: 2px 4px;
+                font-family: '굴림';
+                font-size: 9pt;
+                min-width: 65px;
+            }
+            QPushButton:hover { background-color: #dde8f0; }
+            QPushButton:pressed { background-color: #c0d0e0; }
+        """
+        key_style = "QLabel { color: #666; font-family: '굴림'; font-size: 8pt; padding: 0px; border: none; background: transparent; }"
 
-        # [NEW] TAB 키 → 자료사전 팝업 호출 (이벤트 필터 설치)
-        self.detail_table.installEventFilter(self)
+        def make_btn(text, shortcut_text, callback, fixed_w=None):
+            container = QWidget()
+            l = QVBoxLayout(container)
+            l.setSpacing(1); l.setContentsMargins(0, 0, 0, 0)
+            btn = QPushButton(text)
+            if fixed_w: btn.setFixedWidth(fixed_w)
+            btn.setFixedHeight(26); btn.setStyleSheet(btn_style)
+            btn.clicked.connect(callback)
+            lbl = QLabel(shortcut_text)
+            lbl.setFixedHeight(14); lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); lbl.setStyleSheet(key_style)
+            l.addWidget(btn); l.addWidget(lbl)
+            return container, btn
 
-        right_layout.addWidget(self.detail_table)
+        # Row 1
+        row1 = QHBoxLayout()
+        row1.setContentsMargins(0, 0, 0, 0)
+        c1, _ = make_btn("자료찾기", "Tab", self._show_reference_db_popup, 75)
+        c2, _ = make_btn("매칭확인", "F11", self._on_verify_match_clicked, 75)
+        c3, _ = make_btn("블럭", "F5", lambda: print("F5 clicked"), 60)
+        c4, _ = make_btn("복사", "F6", lambda: print("F6 clicked"), 60)
+        c5, _ = make_btn("이동", "F7", lambda: print("F7 clicked"), 60)
+        c6, _ = make_btn("해제", "F8", lambda: print("F8 clicked"), 60)
+        for c in [c1, c2, c3, c4, c5, c6]: 
+            row1.addWidget(c)
+            if c != c6: row1.addStretch()
+        menu_layout.addLayout(row1)
 
-        self.splitter.addWidget(left_panel)
-        self.splitter.addWidget(right_panel)
+        # Row 2
+        row2 = QHBoxLayout()
+        row2.setContentsMargins(0, 0, 0, 0)
+        
+        # 저장 옵션 (원본/프젝) - 메뉴 바 내부에 조화롭게 배치
+        opt_container = QWidget()
+        opt_l = QHBoxLayout(opt_container)
+        opt_l.setContentsMargins(0, 0, 0, 0); opt_l.setSpacing(5)
+        self.save_option_group = QButtonGroup(self)
+        rb_style = "QRadioButton { font-family: '새굴림'; font-size: 8pt; }"
+        self.save_to_original_rb = QRadioButton("원본")
+        self.save_to_original_rb.setStyleSheet(rb_style); self.save_to_original_rb.setChecked(True)
+        self.save_option_group.addButton(self.save_to_original_rb, 0)
+        self.save_to_project_rb = QRadioButton("프젝")
+        self.save_to_project_rb.setStyleSheet(rb_style)
+        self.save_option_group.addButton(self.save_to_project_rb, 1)
+        opt_l.addWidget(self.save_to_original_rb); opt_l.addWidget(self.save_to_project_rb)
+        
+        c7, _ = make_btn("화면복사", "F9", lambda: print("F9 clicked"), 75)
+        c8, _ = make_btn("붙이기", "F10", lambda: print("F10 clicked"), 65)
+        
+        self.btn_detail_save = QPushButton("저장")
+        self.btn_detail_save.setFixedSize(70, 26); self.btn_detail_save.setStyleSheet(btn_style)
+        self.btn_detail_save.clicked.connect(self._save_piece_file)
+        
+        self.btn_detail_close = QPushButton("취소(ESC)")
+        self.btn_detail_close.setFixedSize(85, 26); self.btn_detail_close.setStyleSheet(btn_style)
+        self.btn_detail_close.clicked.connect(self._detail_popup.hide)
 
-        # [수정] 산출일위 패널 30px 추가 확장 반영 (총 1192 기준)
-        self.splitter.setSizes([490, 672])
-        self.splitter.setStretchFactor(0, 5)
-        self.splitter.setStretchFactor(1, 6)
+        def wrap_btn(b):
+            w = QWidget(); l = QVBoxLayout(w); l.setContentsMargins(0,0,0,0); l.setSpacing(1)
+            l.addWidget(b); l.addSpacing(15); return w
 
-        main_layout.addWidget(self.splitter)
+        row2.addWidget(opt_container)
+        row2.addStretch()
+        row2.addWidget(c7)
+        row2.addStretch()
+        row2.addWidget(c8)
+        row2.addStretch()
+        row2.addWidget(wrap_btn(self.btn_detail_save))
+        row2.addStretch()
+        row2.addWidget(wrap_btn(self.btn_detail_close))
 
-        # [PHASE 3-1] 실시간 합계 표시 (프리뷰) - REMOVED per user request
-        # preview_layout = QHBoxLayout()
-        # preview_layout.setContentsMargins(10, 5, 10, 5)
-        #
-        # self.preview_label = QLabel("합계: 0")
-        # self.preview_label.setStyleSheet(
-        #     "font-family: '새굴림'; font-size: 11pt; font-weight: bold; "
-        #     "color: #2c3e50; background-color: #ecf0f1; padding: 8px; "
-        #     "border-radius: 3px; border-left: 4px solid #3498db;"
-        # )
-        # self.preview_label.setMinimumHeight(35)
-        # preview_layout.addWidget(self.preview_label)
-        #
-        # main_layout.addLayout(preview_layout)
+        menu_layout.addLayout(row2)
+        detail_popup_layout.addWidget(bottom_menu_frame)
 
-        # 하단 버튼
+        # ── 메인 팝업 하단 버튼 ──
         btn_layout = QHBoxLayout()
-
-        # 우측 버튼들
         btn_layout.addStretch()
 
-        # [수정] "선택 적용" → 1식 저장 + 팝업 닫기
-        select_btn = QPushButton("내보내기")  # 버튼명 변경
+        select_btn = QPushButton("내보내기")
         select_btn.setFixedSize(120, 35)
         select_btn.setStyleSheet("font-family: '새굴림'; font-size: 11pt;")
-        select_btn.clicked.connect(self.accept)  # accept() 메서드로 이동
+        select_btn.clicked.connect(self.accept)
 
         close_btn = QPushButton("닫기")
         close_btn.setFixedSize(100, 35)
@@ -532,18 +564,17 @@ class LightingPowerPopup(QDialog):
         btn_layout.addWidget(close_btn)
         main_layout.addLayout(btn_layout)
 
-        # [FIX] 이벤트 필터 설치 일괄 처리 (TAB 키 및 단축키 정상화)
+        # 이벤트 필터 설치
         for w in [
             self.master_table,
-            self.detail_table,
             self.master_table.viewport(),
+            self.detail_table,
             self.detail_table.viewport(),
             self,
         ]:
             if w:
                 w.installEventFilter(self)
 
-        # [FIX] TAB 키가 필터에 도달하도록 내비게이션 비활성화 (전체 패널)
         self.master_table.setTabKeyNavigation(False)
         self.detail_table.setTabKeyNavigation(False)
 
@@ -578,12 +609,13 @@ class LightingPowerPopup(QDialog):
             max_name_width = 100
 
             for r_idx, row in enumerate(rows):
+                # 3컬럼 매핑: 조명기구명(row1), 구분(row2), 산출수식(row3)
                 display_cols = row[1:4]
                 for c_idx, val in enumerate(display_cols):
                     text = str(val) if val is not None else ""
                     item = QTableWidgetItem(text)
 
-                    # 편집 기능 제어: 산출수식만 편집 가능
+                    # 편집 기능 제어: 산출수식(2번)만 편집 가능
                     if c_idx == 2:
                         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                     else:
@@ -607,21 +639,14 @@ class LightingPowerPopup(QDialog):
             if self.initial_data:
                 self.restore_data()
 
-            # 너비 조정: 산출수식(2번) 13% 추가 확장 (105 -> 120)
-            self.master_table.setColumnWidth(0, max_name_width)
-            self.master_table.setColumnWidth(1, 45)
-            self.master_table.setColumnWidth(2, 120)
-
             # [OPTIMIZE] UI 업데이트 재개
             self.master_table.setUpdatesEnabled(True)
 
-            # [여백 최적화]
-            # 좌측 패널 너비 = (기구명) + (구분) + (산출수식) + (마진: 수직헤더+스크롤바 등 약 45px -> 80px로 넉넉하게)
-            # 가로 스크롤 제거 요청 반영
+            # [여백 최적화] - 3컬럼 기준
             left_width_target = max_name_width + 45 + 120 + 80
             total_width = self.width()
 
-            # 스플리터 강제 조정 (왼쪽 고정, 오른쪽 나머지)
+            # 스플리터 강제 조정
             if total_width > left_width_target:
                 self.splitter.setSizes(
                     [left_width_target, total_width - left_width_target]
@@ -958,7 +983,7 @@ class LightingPowerPopup(QDialog):
             self.detail_table.blockSignals(False)
 
     def _on_master_item_clicked(self, item):
-        """마스터 클릭 시 구분별 상세 테이블 로드 및 첫 행 기구명 입력"""
+        """마스터 클릭 시 구분별 상세 테이블 로드 및 산출수식 클릭 시 산출일위 팝업 표시"""
         row_idx = item.row()
 
         # [Step 12] 1. 기존에 작업하던 상세 내역을 캐시에 저장 (항목 이동 시 소실 방지)
@@ -982,21 +1007,33 @@ class LightingPowerPopup(QDialog):
             print(f"[DEBUG] Selection contains empty items at row {row_idx}")
             return
 
-        lighting_name = lighting_item.text().strip()  # 타입별 조명기구
+        lighting_name = lighting_item.text().strip()
         gubun_text = gubun_item.text().strip()
         if not gubun_text:
             return
 
-        # [NEW] 클릭 시 산출수식(2번 컬럼)으로 포커스 이동 및 편집 모드 진입
+        # 클릭 시 산출수식(2번 컬럼)으로 포커스 이동
         if item.column() != 2:
             self.master_table.setCurrentCell(row_idx, 2)
-            # self.master_table.editItem(self.master_table.item(row_idx, 2))
 
-        # [Step 12] 3. 캐시에 데이터가 있는 경우 캐시에서 우선 로드
+        # 3. detail_table에 데이터 로드 (캐시 또는 DB)
+        self._load_detail_data(row_idx, lighting_name, gubun_text)
+
+        # 4. [NEW] 산출수식(2번 컬럼) 클릭 시 산출일위 팝업 표시
+        if item.column() == 2:
+            self._show_detail_popup(lighting_name)
+
+    def _load_detail_data(self, row_idx, lighting_name, gubun_text):
+        """detail_table에 데이터 로드 (캐시 우선, 없으면 DB에서 로드)"""
+        # [Step 12] 캐시에 데이터가 있는 경우 캐시에서 우선 로드
         if row_idx in self.master_details_cache:
             cached_data = self.master_details_cache[row_idx]
             self.detail_table.blockSignals(True)
-            self.detail_table.setRowCount(len(cached_data))
+            # 최소 30행 보장 (사용자 요청)
+            row_count = max(len(cached_data), 30)
+            self.detail_table.setRowCount(row_count)
+            self.detail_table.setShowGrid(True)
+            
             for r_idx, row_dict in enumerate(cached_data):
                 for c_idx, text in row_dict.items():
                     cell_item = QTableWidgetItem(text)
@@ -1004,11 +1041,16 @@ class LightingPowerPopup(QDialog):
                     if c_idx_int in [0, 1, 4]:
                         cell_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     self.detail_table.setItem(r_idx, c_idx_int, cell_item)
+            
+            # 빈 셀에도 행 높이 적용 (그리드 균형)
+            for r in range(row_count):
+                self.detail_table.setRowHeight(r, 22)
+                
             self.detail_table.blockSignals(False)
             self._verify_all_codes()  # 검표 수행
             return
 
-        # 4. 캐시에 없는 경우에만 DB에서 조명기구 템플릿 로드
+        # 캐시에 없는 경우에만 DB에서 조명기구 템플릿 로드
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -1018,7 +1060,11 @@ class LightingPowerPopup(QDialog):
 
             # DB의 2번째 행부터 출력하도록 (DB 기준 첫 줄 제외)
             valid_rows = rows[1:] if len(rows) > 1 else []
-            self.detail_table.setRowCount(len(valid_rows) + 1)
+            
+            # 최소 30행 보장 (데이터 + 1(헤더)가 30보다 작으면 30으로 설정)
+            row_count = max(len(valid_rows) + 1, 30)
+            self.detail_table.setRowCount(row_count)
+            self.detail_table.setShowGrid(True)
 
             # [1행] 타입별 조명기구명 입력
             header_item = QTableWidgetItem(lighting_name)
@@ -1045,19 +1091,52 @@ class LightingPowerPopup(QDialog):
 
                     self.detail_table.setItem(target_r, c_idx, cell_item)
 
+            # 모든 행에 일관된 높이 적용
+            for r in range(row_count):
+                self.detail_table.setRowHeight(r, 22)
+
             conn.close()
 
-            # [NEW] 데이터 로딩 후 일괄 W 마커 검증
+            # 데이터 로딩 후 일괄 W 마커 검증
             self._verify_all_codes()
 
         except sqlite3.OperationalError:
-            # 테이블이 없는 경우 첫 행 기구명만 입력
             print(f"[WARNING] Table '{gubun_text}' not found in DB.")
-            self.detail_table.setRowCount(1)
+            self.detail_table.setRowCount(30)
+            self.detail_table.setShowGrid(True)
             self.detail_table.setItem(0, 2, QTableWidgetItem(lighting_name))
+            for r in range(30): self.detail_table.setRowHeight(r, 22)
         except Exception as e:
             print(f"[ERROR] Error loading detail data for table '{gubun_text}': {e}")
+            self.detail_table.setRowCount(30)
+            self.detail_table.setShowGrid(True)
             self.detail_table.setItem(0, 2, QTableWidgetItem(lighting_name))
+            for r in range(30): self.detail_table.setRowHeight(r, 22)
+
+    def _show_detail_popup(self, lighting_name=""):
+        """산출일위 팝업 다이얼로그를 표시 (산출수식 클릭 시 호출)"""
+        self._detail_popup.setWindowTitle(f"산출일위표 - {lighting_name}")
+        self.lbl_item_name_detail.setText(f"산출일위목록: {lighting_name}")
+        
+        # 부모 팝업(산출목록) 우측에 배치
+        from PyQt6.QtCore import QPoint
+        parent_pos = self.pos()
+        parent_w = self.width()
+        target_x = parent_pos.x() + parent_w + 5
+        target_y = parent_pos.y()
+
+        # 화면 밖으로 나가지 않도록 보정
+        from PyQt6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen().availableGeometry()
+        if target_x + self._detail_popup.width() > screen.right():
+            target_x = parent_pos.x() - self._detail_popup.width() - 5
+        if target_y + self._detail_popup.height() > screen.bottom():
+            target_y = screen.bottom() - self._detail_popup.height() - 10
+
+        self._detail_popup.move(target_x, target_y)
+        self._detail_popup.show()
+        self._detail_popup.raise_()
+        print(f"[DEBUG] Detail popup shown with standard design for '{lighting_name}'")
 
     def load_from_saved_state(self, saved_data):
         """[Step 11/12] 저장된 JSON 데이터를 기반으로 세부산출조서 상태 복구"""
@@ -1067,7 +1146,7 @@ class LightingPowerPopup(QDialog):
         try:
             # 1. 헤더 복구
             self.item_name = saved_data.get("item_header", "")
-            self.setWindowTitle(f"세부산출조서 - {self.item_name} (수정)")
+            self.setWindowTitle("산출조서목록")
 
             # [Step 12] 2. 마스터 테이블 산출수식 복구
             self.master_table.blockSignals(True)
@@ -1255,6 +1334,10 @@ class LightingPowerPopup(QDialog):
 
     def accept(self):
         """[NEW] 내보내기 버튼 또는 ESC → 1식 저장 후 팝업 닫기"""
+        # [NEW] 상세 팝업(산출일위표)도 함께 숨김
+        if hasattr(self, "_detail_popup") and self._detail_popup.isVisible():
+            self._detail_popup.hide()
+
         # 상태 저장
         self.save_state()
 
@@ -1264,7 +1347,12 @@ class LightingPowerPopup(QDialog):
             super().accept()
         else:
             print("[WARNING] Failed to save data. Popup remains open.")
-            # 저장 실패 시 팝업 유지
+
+    def reject(self):
+        """[NEW] 창 닫기('X') 시 상세 팝업도 함께 숨김"""
+        if hasattr(self, "_detail_popup") and self._detail_popup.isVisible():
+            self._detail_popup.hide()
+        super().reject()
 
     def keyPressEvent(self, event):
         """[NEW] ESC 키: 저장 후 산출내역서로 복귀"""
@@ -1282,10 +1370,8 @@ class LightingPowerPopup(QDialog):
             modifiers = event.modifiers()
             is_ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
 
-            # 1. TAB 키 처리 (자료사전 호출 등)
+            # 1. TAB 키 처리
             if key == Qt.Key.Key_Tab:
-                focused = self.focusWidget()
-                # 위젯 타입 판별 세분화
                 is_on_master = obj == self.master_table or (
                     obj.isWidgetType() and self.master_table.isAncestorOf(obj)
                 )
@@ -1293,33 +1379,38 @@ class LightingPowerPopup(QDialog):
                     obj.isWidgetType() and self.detail_table.isAncestorOf(obj)
                 )
 
-                # [산출목록 -> 산출일위 이동] (좌측 패널 어느 컬럼에서든 즉시 이동)
+                # 산출목록에서 TAB → 산출일위 팝업의 detail_table로 이동
                 if is_on_master:
-                    # 에디터가 열려있는 경우 커밋
                     if self.master_table.state() == QTableWidget.State.EditingState:
                         self.master_table.setCurrentCell(
                             self.master_table.currentRow(),
                             self.master_table.currentColumn(),
                         )
 
-                    target_row = self.detail_table.currentRow()
-                    if target_row < 0:
-                        target_row = 0
+                    # 산출일위 팝업이 열려있으면 detail_table로 포커스 이동
+                    if self._detail_popup.isVisible():
+                        target_row = self.detail_table.currentRow()
+                        if target_row < 0:
+                            target_row = 0
+                        self.detail_table.setCurrentCell(target_row, 1)
+                        self.detail_table.setFocus()
+                        return True
 
-                    # [FIX] CODE 컬럼(Index 1)으로 커서 즉시 이동
-                    self.detail_table.setCurrentCell(target_row, 1)
-                    self.detail_table.setFocus()
+                    # 팝업이 없으면 다음 행의 산출수식으로 이동
+                    current_row = self.master_table.currentRow()
+                    next_row = current_row + 1
+                    if next_row < self.master_table.rowCount():
+                        self.master_table.setCurrentCell(next_row, 2)
                     return True
 
-                # [산출일위 -> 자료사전 호출] (우측 패널 '산출목록' 칸에서 팝업 열기)
+                # 산출일위 팝업 내 detail_table에서 TAB → 자료사전 호출
                 if is_on_detail:
                     row = self.detail_table.currentRow()
                     col = self.detail_table.currentColumn()
-                    # 산출목록(Col 2) 또는 CODE(Col 1)에서 호출 허용
                     if col in [1, 2] and row >= 0:
-                        # 편집 모드면 데이터 확정
                         if self.detail_table.state() == QTableWidget.State.EditingState:
                             try:
+                                from PyQt6.QtWidgets import QLineEdit, QAbstractItemDelegate
                                 editor = (
                                     obj
                                     if isinstance(obj, QLineEdit)
@@ -2088,6 +2179,13 @@ class LightingPowerManager:
     def _open_popup(self, title, target_row, saved_data=None):
         """실제 팝업 오픈 및 데이터 처리"""
         try:
+            # [NEW] 분전반 산출인 경우 전용 매니저에게 위임
+            if title == "분전반 산출":
+                if hasattr(self.parent_tab, "dist_board_manager"):
+                    self._is_opening_popup = False  # 가드 해제
+                    self.parent_tab.dist_board_manager._open_popup(title, target_row, saved_data)
+                    return
+
             popup = LightingPowerPopup(
                 self.parent_tab.main_window, title, parent_tab=self.parent_tab
             )

@@ -203,6 +203,10 @@ class OutputDetailTab:
 
         self.lighting_manager = LightingPowerManager(self)
 
+        # [NEW] 분전반 매니저 초기화
+        from distribution_board_manager import DistributionBoardManager
+        self.dist_board_manager = DistributionBoardManager(self)
+
         # [NEW] 미저장 데이터 초기화 (사용자 요청: 새로 프로그램을 시작하면 행당 데이터 초기화)
         self._cleanup_unsaved_chunks()
 
@@ -1140,27 +1144,55 @@ class OutputDetailTab:
         pass
 
     def on_eulji_cell_clicked(self, row, column):
-        """을지 테이블 셀 클릭 시"""
-        print(f"[DEBUG] CELL CLICKED: row={row}, col={column}")
+        """을지 테이블 셀 클릭 시
+        
+        1차: 산출목록(ITEM) 클릭 → "전등수량(갯수)산출" 등 특수 항목이면 LightingPowerPopup 호출
+        2차: 산출목록(ITEM) 또는 산출수식(FORMULA) 클릭 → 일반 항목이면 산출일위표 패널 표시
+        """
+        # 재진입 방지
+        if getattr(self, "_cell_click_guard", False):
+            return
+        self._cell_click_guard = True
+        
         try:
-            from datetime import datetime
+            print(f"[DEBUG] CELL CLICKED: row={row}, col={column}")
+            try:
+                from datetime import datetime
+                log_path = os.path.join(self.project_root, "debug_trigger.log")
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now()}] on_eulji_cell_clicked: row={row}, col={column}\n")
+            except:
+                pass
 
-            log_path = os.path.join(self.project_root, "debug_trigger.log")
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(
-                    f"[{datetime.now()}] on_eulji_cell_clicked: row={row}, col={column}\n"
-                )
-        except:
-            pass
+            # 해당 행의 산출목록(ITEM) 텍스트 확인
+            item_col = self.EULJI_COLS["ITEM"]
+            item = self.eulji_table.item(row, item_col)
+            item_text = item.text().strip() if item else ""
 
-        # [REMOVED] 클릭 시 자료사전 호출 로직 제거 (사용자 재요청: 클릭 시에는 '산출일위표'가 떠야 함)
-        # Tab 키 입력 시에는 TableEventFilter를 통해 여전히 '자료사전'이 호출됩니다.
+            # [1차 호출] "전등수량(갯수)산출" 등 특수 항목 — LightingPowerPopup 호출
+            from core.unit_price_trigger import EXCLUDED_ITEM_TEXTS
+            if item_text in EXCLUDED_ITEM_TEXTS and column == item_col:
+                # 1) 분전반 산출 처리
+                if item_text == "분전반 산출":
+                    if hasattr(self, "dist_board_manager"):
+                        print(f"[DEBUG] Special item '분전반 산출' clicked → opening DistributionBoardPopup")
+                        self.dist_board_manager.edit_row(row)
+                    return
+                # 2) 전등/조명기구 산출 처리
+                if hasattr(self, "lighting_manager"):
+                    print(f"[DEBUG] Special item '{item_text}' clicked → opening LightingPowerPopup")
+                    self.lighting_manager.edit_row(row)
+                return
 
-        # [NEW] 산출일위표 연동: 산출목록 컬럼이면 팝업 노출, 아니면 숨김
-        if hasattr(self, "unit_price_trigger") and self.unit_price_trigger:
-            self.unit_price_trigger.handle_cell_selection(row, column)
-        else:
-            print("[ERROR] unit_price_trigger not found in OutputDetailTab!")
+            # [2차 호출] 일반 항목 — 산출목록(ITEM) 또는 산출수식(FORMULA) 클릭 시 산출일위표 패널 표시
+            if hasattr(self, "unit_price_trigger") and self.unit_price_trigger:
+                self.unit_price_trigger.handle_cell_selection(row, column)
+            else:
+                print("[ERROR] unit_price_trigger not found in OutputDetailTab!")
+        except Exception as e:
+            print(f"[ERROR] on_eulji_cell_clicked: {e}")
+        finally:
+            self._cell_click_guard = False
 
     def _show_reference_popup(self, row, col):
         """자료사전 DB 팝업 통합 호출 및 인스턴스 관리"""
@@ -1281,8 +1313,9 @@ class OutputDetailTab:
         if not item:
             return
 
-        # 산출목록이 "전등수량(갯수)산출"인 경우 팝업 호출
-        if item.text() == "전등수량(갯수)산출":
+        # EXCLUDED_ITEM_TEXTS에 해당하는 특수 항목이면 LightingPowerPopup 호출
+        from core.unit_price_trigger import EXCLUDED_ITEM_TEXTS
+        if item.text().strip() in EXCLUDED_ITEM_TEXTS:
             if hasattr(self, "lighting_manager"):
                 # 현재 행의 상세 데이터 로드하여 팝업 열기
                 self.lighting_manager.edit_row(row)

@@ -32,7 +32,7 @@ except:
 
 DEFAULT_ROWS = 500  # 기본 행 수 (엑셀 스타일 무한 그리드)
 DEFAULT_ROW_HEIGHT = 18  # 24 -> 18 (상하 1px 여백 최적화)
-UNIT_PRICE_ROW_HEIGHT = 22  # 산출일위표 전용 (헤더와 조화되는 높이)
+UNIT_PRICE_ROW_HEIGHT = 25  # 분전반 목록(25px)과 동일하게 조정 (너무 좁다는 피드백 반영)
 DEFAULT_FONT_SIZE = 11
 HEADER_FONT_SIZE = 11
 
@@ -116,19 +116,21 @@ EULJI_COLUMN_WIDTHS = {
     "비고": 75,
 }
 
-# [NEW] 산출일위표 컬럼 정의
+# [NEW] 산출일위표 컬럼 정의 (표준 5컬럼)
 UNIT_PRICE_COLS = {
-    "MARK": 0,    # "#." (상태 마커)
-    "LIST": 1,    # "산출일위목록"
-    "UNIT_QTY": 2, # "단위수량"
-    "UNIT_TOTAL": 3, # "단위계"
+    "MARK": 0,         # "W" (선택/마커)
+    "CODE": 1,         # "CODE"
+    "LIST": 2,         # "산출일위목록"
+    "UNIT_FORMULA": 3, # "단위수식"
+    "UNIT_TOTAL": 4,   # "계"
 }
-UNIT_PRICE_COL_NAMES = ["#.", "산출일위목록", "단위수량", "단위계"]
+UNIT_PRICE_COL_NAMES = ["W", "CODE", "산출일위목록", "단위수식", "계"]
 UNIT_PRICE_COL_WIDTHS = {
-    "MARK": 35,
-    "산출일위목록": 325, # ID 너비를 조금 흡수
-    "단위수량": 100,
-    "단위계": 75,
+    "MARK": 10,
+    "CODE": 120,
+    "산출일위목록": 280,
+    "UNIT_FORMULA": 180, # 기본값, 실제로는 Stretch 적용 권장
+    "UNIT_TOTAL": 120,
 }
 
 # 기초작업 을지 컬럼 (이미지 기반) - #. 및 대표목록 추가
