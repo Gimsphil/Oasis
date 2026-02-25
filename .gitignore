@@ -1,0 +1,37 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# Logs / runtime artifacts
+*.log
+bat_log.txt
+tab_debug.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Local debug outputs
+_debug/*.log
+_scripts/*.log
+_scripts/done_flag.txt
+
+# Jupyter
+.ipynb_checkpoints/
+
+# SQLite temporary files
+*.db-journal
+*.db-wal
+*.db-shm
