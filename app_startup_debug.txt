@@ -1,6 +1,6 @@
 === OASIS Startup Debug ===
-Time: 2026-02-27 11:10:41.401452
-Python: D:\오아시스\SANCHUL_Sheet_1\.venv\Scripts\python.exe
+Time: 2026-02-27 15:19:25.035948
+Python: C:\Users\KIMPHIL\AppData\Local\Programs\Python\Python314\python.exe
 CWD: D:\오아시스\SANCHUL_Sheet_1
 
 [INFO] Starting Application...
