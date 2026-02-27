@@ -25,6 +25,8 @@ class ReferenceTableModel(QAbstractTableModel):
         self._headers = ["번호", "명칭(Description)", "규격(Size)", "단위", "산출수량"]
         # 수량 입력을 저장할 딕셔너리 {row_idx: qty_text}
         self._qty_inputs = {}
+        # 사용자 입력 순서 추적 (자료사전 입력 순서대로 전송 보장)
+        self._qty_order = []
         # 검색용 통합 데이터 캐시
         self._search_blobs = []
         self._prepare_search_blobs()
@@ -128,13 +130,24 @@ class ReferenceTableModel(QAbstractTableModel):
                         # 사용자 요청에 따라 단순하게 '+'로 연결
                         new_val = f"{existing_val}+{new_val}"
                 self._qty_inputs[row] = new_val
+                if row in self._qty_order:
+                    self._qty_order.remove(row)
+                self._qty_order.append(row)
             else:
                 # 입력이 비어있으면 딕셔너리에서 제거 (사용자 의도: 입력 취소)
                 if row in self._qty_inputs:
                     del self._qty_inputs[row]
+                if row in self._qty_order:
+                    self._qty_order.remove(row)
             self.dataChanged.emit(index, index, [role])
             return True
         return False
+
+    def get_qty_rows_in_input_order(self):
+        """산출수량이 입력된 행 인덱스를 사용자 입력 순서대로 반환."""
+        ordered = [row for row in self._qty_order if row in self._qty_inputs]
+        unordered = [row for row in self._qty_inputs.keys() if row not in ordered]
+        return ordered + unordered
 
     @property
     def is_main_sheet(self):
@@ -154,6 +167,7 @@ class ReferenceTableModel(QAbstractTableModel):
     def clear_all_qty(self):
         """모든 수량 입력 데이터 초기화 (신규 프로젝트/공종용)"""
         self._qty_inputs = {}
+        self._qty_order = []
         self.layoutChanged.emit()
 
     def flags(self, index):
@@ -625,7 +639,7 @@ class DatabaseReferencePopup(QDialog):
                 detail_table = self.parent_popup.detail_table
                 active_row = self.current_row
                 
-                for row in sorted(self.model._qty_inputs.keys()):
+                for row in self.model.get_qty_rows_in_input_order():
                     qty_text = self.model._qty_inputs[row].strip()
                     if not qty_text or not self._is_numeric(qty_text): continue
                     
@@ -656,7 +670,7 @@ class DatabaseReferencePopup(QDialog):
                 u_cols = self.parent_popup.UNIT_PRICE_COLS
                 active_row = self.current_row
                 
-                for row in sorted(self.model._qty_inputs.keys()):
+                for row in self.model.get_qty_rows_in_input_order():
                     qty_text = self.model._qty_inputs[row].strip()
                     if not qty_text or not self._is_numeric(qty_text): continue
                     
@@ -721,7 +735,7 @@ class DatabaseReferencePopup(QDialog):
 
                 # 삽입할 데이터를 먼저 수집
                 items_to_insert = []
-                for row in sorted(self.model._qty_inputs.keys()):
+                for row in self.model.get_qty_rows_in_input_order():
                     qty_text = self.model._qty_inputs[row].strip()
                     if not qty_text or not self._is_numeric(qty_text): continue
 
@@ -748,7 +762,7 @@ class DatabaseReferencePopup(QDialog):
 
                 # 순차적으로 삽입 (blockSignals 상태에서)
                 inserted_rows = []  # 실제 삽입된 행 번호 추적
-                for output_name, qty_text, unit in items_to_insert:
+                for output_name, qty_text, unit, is_il_mok in items_to_insert:
                     try:
                         target_row = active_row
                         # [FIX] item()일 수 있으므로 안전하게 체크 후 행 삽입 결정
@@ -758,7 +772,7 @@ class DatabaseReferencePopup(QDialog):
                             target_row += 1
 
                         # [NEW] '일목'인 경우 'i' 마크 표시
-                        if len(items_to_insert[sent_count]) > 3 and items_to_insert[sent_count][3]:
+                        if is_il_mok:
                             mark_item = QTableWidgetItem("i")
                             mark_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                             mark_item.setForeground(QColor("#000080")) # Navy
@@ -769,7 +783,6 @@ class DatabaseReferencePopup(QDialog):
                         else:
                             eulji_table.setItem(target_row, e_cols["GUBUN"], QTableWidgetItem(""))
 
-                        output_name, qty_text, unit, _ = items_to_insert[sent_count]
                         eulji_table.setItem(target_row, e_cols["ITEM"], QTableWidgetItem(output_name))
                         eulji_table.setItem(target_row, e_cols["FORMULA"], QTableWidgetItem(qty_text))
                         eulji_table.setItem(target_row, e_cols["UNIT"], QTableWidgetItem(unit))

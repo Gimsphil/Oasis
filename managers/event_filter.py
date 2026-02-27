@@ -162,6 +162,25 @@ class TableEventFilter(QObject):
                         break
                     curr = curr.parent() if hasattr(curr, "parent") else None
 
+                # [FIX] 에디터(QLineEdit) 포커스 상태에서도 대상 테이블을 안정적으로 찾기
+                if target_table is None:
+                    focus_w = QApplication.focusWidget()
+                    for candidate in [
+                        getattr(self.parent_tab, "eulji_table", None),
+                        getattr(self.parent_tab, "gapji_table", None),
+                    ]:
+                        if candidate is None:
+                            continue
+                        if obj == candidate:
+                            target_table = candidate
+                            break
+                        if isinstance(obj, QWidget) and candidate.isAncestorOf(obj):
+                            target_table = candidate
+                            break
+                        if focus_w and (focus_w == candidate or candidate.isAncestorOf(focus_w)):
+                            target_table = candidate
+                            break
+
                 if target_table:
                     # [STABILIZED] Modifier 체크를 bitwise AND로 변경하여 NumLock/CapsLock 등에도 대응
                     if key == Qt.Key.Key_N and ctrl:
@@ -249,17 +268,17 @@ class TableEventFilter(QObject):
                                 trigger = getattr(
                                     self.parent_tab, "unit_price_trigger", None
                                 )
-                                if (
-                                    trigger
-                                    and trigger.popup
-                                    and trigger.popup.isVisible()
-                                ):
-                                    # 산출일위표가 열려있으면 해당 팝업의 테이블에 포커스 이동
-                                    trigger.popup.table.setFocus()
-                                    if trigger.popup.table.rowCount() > 0:
-                                        trigger.popup.table.setCurrentCell(
-                                            0, trigger.popup.UNIT_PRICE_COLS["LIST"]
-                                        )
+                                if trigger:
+                                    # 에디터 입력 커밋 후 지연 전환으로 안정화
+                                    event.accept()
+                                    focus_w = QApplication.focusWidget()
+                                    if focus_w is not None and focus_w != target_table:
+                                        target_table.setFocus()
+
+                                    QTimer.singleShot(
+                                        10,
+                                        lambda r=current_row, c=item_col, t=trigger: self._focus_unit_price_from_item_enter(r, c, t),
+                                    )
                                     return True
 
                     if key == Qt.Key.Key_Escape:
@@ -336,6 +355,28 @@ class TableEventFilter(QObject):
 
         except Exception as e:
             self._log(f"ERROR: _handle_formula_enter: {e}")
+
+    def _focus_unit_price_from_item_enter(self, row, item_col, trigger):
+        """산출목록 Enter 후 산출일위표를 열고 LIST 셀로 포커스 이동."""
+        try:
+            trigger.handle_cell_selection(row, item_col)
+            if not trigger.popup or not trigger.popup.isVisible():
+                return
+
+            popup_table = trigger.popup.table
+            popup_table.setFocus()
+            if popup_table.rowCount() <= 0:
+                popup_table.setRowCount(1)
+
+            list_col = trigger.popup.UNIT_PRICE_COLS["LIST"]
+            popup_table.setCurrentCell(0, list_col)
+            target_item = popup_table.item(0, list_col)
+            if target_item is None:
+                target_item = QTableWidgetItem("")
+                popup_table.setItem(0, list_col, target_item)
+            popup_table.editItem(target_item)
+        except Exception as e:
+            self._log(f"ERROR: _focus_unit_price_from_item_enter: {e}")
 
     def _handle_copy(self, table):
         """[Phase 1-3] Ctrl+C - 셀/행 복사"""
