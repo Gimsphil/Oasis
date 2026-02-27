@@ -1,9 +1,11 @@
 import sqlite3
 import os
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 db_paths = [
-    r"D:\이지맥스\data\자료사전.db",
-    r"D:\이지맥스\산출목록\조명기구타입.db"
+    os.path.join(PROJECT_ROOT, "data", "자료사전.db"),
+    os.path.normpath(os.path.join(PROJECT_ROOT, "..", "산출목록", "조명기구타입.db")),
 ]
 
 def inspect_db(path):

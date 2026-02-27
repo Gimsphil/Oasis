@@ -6,8 +6,8 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
 db_paths = [
-    r"D:\이지맥스\data\자료사전.db",
-    r"D:\이지맥스\산출목록\조명기구타입.db"
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "자료사전.db"),
+    os.path.normpath(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "산출목록", "조명기구타입.db")),
 ]
 
 output_file = "schema_info.txt"

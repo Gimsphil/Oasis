@@ -212,7 +212,12 @@ class DatabaseReferencePopup(QDialog):
     @property
     def ref_db_path(self):
         """부모가 가진 DB 경로를 우선 참조, 없으면 기본값 사용"""
-        return getattr(self.parent_popup, 'ref_db_path', r"D:\오아시스\data\자료사전.db")
+        fallback_db_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "data",
+            "자료사전.db",
+        )
+        return getattr(self.parent_popup, 'ref_db_path', fallback_db_path)
 
     def prepare_show(self, current_row, current_col, target_table=None):
         """창을 표시하기 전에 필요한 정보를 갱신 (Parent와 동기화)"""

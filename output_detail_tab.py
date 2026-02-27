@@ -168,7 +168,12 @@ class OutputDetailTab:
         self.project_root = base_dir
 
         # [NEW] 자료사전 DB 경로 설정
-        self.ref_db_path = r"D:\오아시스\data\자료사전.db"
+        self.ref_db_path = os.path.join(self.project_root, "data", "자료사전.db")
+
+        # [NEW] 전등/전열 조명기구 타입 DB 경로 설정
+        self.lighting_type_db_path = os.path.normpath(
+            os.path.join(self.project_root, "..", "산출목록", "조명기구타입.db")
+        )
 
         # 공종 폴더 경로
         self.gongjong_folder_path = os.path.join(self.project_root, "gongjong")
@@ -737,7 +742,7 @@ class OutputDetailTab:
         """전등/전열 버튼 클릭 시 호출"""
         print("[DEBUG] Lighting/Power button clicked")
         if hasattr(self, "lighting_manager"):
-            self.lighting_manager.toggle_panel()
+            self.lighting_manager.show_panel()
 
     def _on_eulji_category_clicked(self, category):
         """을지 상단 카테고리 버튼 클릭 핸들러"""
@@ -745,6 +750,8 @@ class OutputDetailTab:
         if category == "전등/전열":
             self._on_lighting_power_clicked()
         else:
+            if hasattr(self, "lighting_manager"):
+                self.lighting_manager.hide_panel()
             # 다른 카테고리에 대한 공종 리스트 로드 (필요시 구현)
             self._load_gongjong_list_from_file(category)
 
@@ -858,11 +865,15 @@ class OutputDetailTab:
 
     def _load_gongjong_list_from_file(self, category):
         """파일에서 공종 리스트 로드"""
-        # 경로: D:\오아시스\사용자목록\공종리스트\{category}.txt
-        # category가 '공통'인 경우 '공통.txt' 로딩
+        user_list_path = os.path.normpath(
+            os.path.join(self.project_root, "..", "사용자목록")
+        )
 
-        base_path = r"D:\오아시스\사용자목록\공종리스트"
-        file_path = os.path.join(base_path, f"{category}.txt")
+        if category == "전등/전열":
+            file_path = os.path.join(user_list_path, "전등,전열 산출공종.txt")
+        else:
+            base_path = os.path.join(user_list_path, "공종리스트")
+            file_path = os.path.join(base_path, f"{category}.txt")
 
         self.gongjong_list.clear()  # Clear existing items
 
