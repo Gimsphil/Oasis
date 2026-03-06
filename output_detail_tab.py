@@ -62,6 +62,7 @@ from ui.side_panel import GongjongListPanel
 from ui.eulji_menu import EuljiCategoryMenu
 from core.unit_price_trigger import CalculationUnitPriceTrigger
 from managers.event_filter import TableEventFilter
+from utils.path_config import OASIS_ROOT, SANCHUL_ROOT
 
 # [DEBUG] Module-level log to confirm import
 try:
@@ -163,16 +164,15 @@ class OutputDetailTab:
         self.gongjong_items = []
         self.gongjong_category = "전기"
 
-        # 파일 경로 계산
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        self.project_root = base_dir
+        # 파일 경로 계산 (환경변수 우선, 미설정 시 현재 파일 기준)
+        self.project_root = str(SANCHUL_ROOT)
 
         # [NEW] 자료사전 DB 경로 설정
         self.ref_db_path = os.path.join(self.project_root, "data", "자료사전.db")
 
         # [NEW] 전등/전열 조명기구 타입 DB 경로 설정
         self.lighting_type_db_path = os.path.normpath(
-            os.path.join(self.project_root, "..", "산출목록", "조명기구타입.db")
+            os.path.join(str(OASIS_ROOT), "산출목록", "조명기구타입.db")
         )
 
         # 공종 폴더 경로
@@ -1586,7 +1586,7 @@ class OutputDetailTab:
         header_layout = QHBoxLayout()
         icon_label = QLabel()
         # [수정] 사용자 지정 로고 경로 적용
-        icon_path = r"D:\오아시스\SANCHUL_Sheet_1\assets\icons\오아시스_로고01.png"
+        icon_path = os.path.join(self.project_root, "assets", "icons", "오아시스_로고01.png")
         if os.path.exists(icon_path):
             pixmap = QPixmap(icon_path).scaled(
                 80,

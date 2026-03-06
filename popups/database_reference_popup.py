@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QEvent, QAbstractTableModel, QModelIndex, QVariant, QTimer
 from PyQt6.QtGui import QColor, QFont, QPalette
 from utils.column_settings import CleanStyleDelegate
+from utils.path_config import SANCHUL_ROOT
 
 class ReferenceTableModel(QAbstractTableModel):
     """자료사전 대용량 데이터를 위한 고성능 가상 모델 (19,000+ 행 대응)"""
@@ -199,7 +200,7 @@ class DatabaseReferencePopup(QDialog):
         self.target_table = None # [NEW] 데이터를 보낼 대상 테이블 객체 직접 저장
         
         # 경로 및 설정
-        self.original_mapping_path = r"D:\오아시스\data\manual_mapping.json"
+        self.original_mapping_path = os.path.join(str(SANCHUL_ROOT), "data", "manual_mapping.json")
         # [NEW] 호출 모드 판별 로직 (동적 프로퍼티로 이관)
         
         # UI 및 데이터 초기화
