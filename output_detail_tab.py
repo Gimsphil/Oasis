@@ -38,6 +38,7 @@ import re
 import os
 import sqlite3
 import sys
+import subprocess
 
 
 # 내부 모듈 임포트
@@ -1656,8 +1657,13 @@ class OutputDetailTab:
         log_path = os.path.join(self.project_root, "SYSTEM_LOG.md")
         if os.path.exists(log_path):
             try:
-                # Windows 기본 텍스트 편집기(메모장 등)로 열기
-                os.startfile(log_path)
+                # OS별 기본 앱으로 열기
+                if sys.platform.startswith("win"):
+                    os.startfile(log_path)
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", log_path])
+                else:
+                    subprocess.Popen(["xdg-open", log_path])
             except Exception as e:
                 QMessageBox.warning(
                     self.main_window, "오류", f"시스템 로그를 열 수 없습니다: {e}"

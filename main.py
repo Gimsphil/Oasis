@@ -5,9 +5,19 @@ import traceback
 import subprocess
 import time
 import datetime
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+OASIS_ROOT = Path(os.getenv("OASIS_ROOT", BASE_DIR.parent))
+LOG_DIR = Path(os.getenv("OASIS_LOG_DIR", OASIS_ROOT / "logs"))
+if not LOG_DIR.exists():
+    LOG_DIR = BASE_DIR
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+STARTUP_LOG_PATH = LOG_DIR / "startup_debug.log"
+APP_STARTUP_DEBUG_PATH = LOG_DIR / "app_startup_debug.txt"
 
 # Fix encoding for Windows console output
-if sys.stdout.encoding.lower() != 'utf-8':
+if (sys.stdout.encoding or "").lower() != 'utf-8':
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
@@ -33,7 +43,7 @@ class DebugOutput:
 # [DEBUG] Critical File Logging
 def log_to_file(msg):
     try:
-        with open("startup_debug.log", "a", encoding="utf-8") as f:
+        with open(STARTUP_LOG_PATH, "a", encoding="utf-8") as f:
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{timestamp}] {msg}\n")
     except:
@@ -66,7 +76,7 @@ def msgbox(title, text, style=0):
 
 # 2. 경로 설정 (중복 제거 및 명확화)
 # 현재 디렉토리와 하위 주요 폴더들을 sys.path에 추가하여 모듈 임포트 오류 방지
-current_dir = os.path.dirname(os.path.abspath(__file__))
+current_dir = str(BASE_DIR)
 module_paths = [
     current_dir,
     os.path.join(current_dir, "core"),
@@ -106,7 +116,7 @@ def main():
     # Write debug info to file IMMEDIATELY
     debug_file = None
     try:
-        debug_file = open("app_startup_debug.txt", "w", encoding="utf-8")
+        debug_file = open(APP_STARTUP_DEBUG_PATH, "w", encoding="utf-8")
         debug_file.write(f"=== OASIS Startup Debug ===\n")
         debug_file.write(f"Time: {datetime.datetime.now()}\n")
         debug_file.write(f"Python: {sys.executable}\n")
@@ -188,8 +198,9 @@ def main():
         error_msg = f"RUNTIME ERROR:\n{str(e)}\n\n{traceback.format_exc()}"
         print(error_msg)
         log_to_file(error_msg)
-        debug_file.write(f"ERROR: {error_msg}\n")
-        debug_file.flush()
+        if debug_file:
+            debug_file.write(f"ERROR: {error_msg}\n")
+            debug_file.flush()
         msgbox("Runtime Error", error_msg, 0x10)
         # sys.exit(1) # Don't exit immediately, allow user to see console
     
@@ -206,7 +217,7 @@ if __name__ == "__main__":
         print(f"CRITICAL MAIN FAILURE: {e}")
         traceback.print_exc()
     
-    print("Press Enter to exit...")
-    log_to_file("Waiting for user input to exit...")
-    input()
-
+    if sys.stdin and sys.stdin.isatty():
+        print("Press Enter to exit...")
+        log_to_file("Waiting for user input to exit...")
+        input()
