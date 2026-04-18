@@ -244,6 +244,9 @@ def export_estimate_to_excel(estimate_data: dict, output_path: str):
             bottom=Side(style="thin"),
         )
 
+        ws = wb.active
+        ws.title = "견적서"
+
         # 견적서 헤더
         headers = [
             "품명",
@@ -260,9 +263,6 @@ def export_estimate_to_excel(estimate_data: dict, output_path: str):
             cell.font = header_font
             cell.fill = header_fill
             cell.border = thin_border
-
-        ws = wb.active
-        ws.title = "견적서"
 
         # 데이터
         for gongjong, items in estimate_data.items():

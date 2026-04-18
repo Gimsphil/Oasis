@@ -65,16 +65,10 @@ from core.unit_price_trigger import CalculationUnitPriceTrigger
 from managers.event_filter import TableEventFilter
 from utils.path_config import OASIS_ROOT, SANCHUL_ROOT
 
-# [DEBUG] Module-level log to confirm import
-try:
-    with open("tab_debug.log", "a", encoding="utf-8") as _f:
-        import datetime as _dt
+# [DEBUG] 모듈 로드 확인 (OASIS_DEBUG=1 환경변수 설정 시에만 기록)
+from utils.logger import oasis_log
+oasis_log("output_detail_tab.py module loaded with new modular structure", "tab_debug.log")
 
-        _f.write(
-            f"[{_dt.datetime.now().strftime('%H:%M:%S')}] output_detail_tab.py module loaded with new modular structure\n"
-        )
-except:
-    pass
 
 
 class OutputDetailTab:
@@ -220,8 +214,13 @@ class OutputDetailTab:
         except ModuleNotFoundError as e:
             print(f"[WARN] Distribution board manager disabled: {e}")
 
+        # [NEW] 프로젝트 매니저 초기화
+        from core.project_manager import ProjectManager
+        self.project_manager = ProjectManager(self)
+
         # [NEW] 미저장 데이터 초기화 (사용자 요청: 새로 프로그램을 시작하면 행당 데이터 초기화)
         self._cleanup_unsaved_chunks()
+
 
         print(
             f"[DEBUG] OutputDetailTab Init. Path exists: {os.path.exists(self.gongjong_file_path)}"
@@ -257,6 +256,161 @@ class OutputDetailTab:
         self.undo_stack = []
         # [NEW] 산출일위표 트리거 초기화
         self.unit_price_trigger = CalculationUnitPriceTrigger(self)
+
+    # ================================================================
+    # 파일 메뉴 드롭다운 (_show_file_menu / _show_edit_menu)
+    # ================================================================
+
+    def _show_file_menu(self):
+        """파일(F) 버튼 클릭 시 드롭다운 메뉴 표시"""
+        from PyQt6.QtWidgets import QMenu
+        from PyQt6.QtGui import QAction
+
+        menu = QMenu(self.main_window)
+        menu.setStyleSheet("""
+            QMenu {
+                font-family: '새굴림'; font-size: 11pt;
+                background-color: #ffffff; border: 1px solid #999;
+            }
+            QMenu::item:selected { background-color: #cce0f0; }
+            QMenu::separator { height: 1px; background: #ccc; margin: 2px 8px; }
+        """)
+
+        act_new  = QAction("새 프로젝트", menu)
+        act_open = QAction("열기...", menu)
+        act_save = QAction("저장  (Ctrl+S)", menu)
+        act_save_as = QAction("다른 이름으로 저장...", menu)
+
+        act_new.triggered.connect(self.on_new_project)
+        act_open.triggered.connect(self.on_open_project)
+        act_save.triggered.connect(self.on_save_project)
+        act_save_as.triggered.connect(self.on_save_project_as)
+
+        menu.addAction(act_new)
+        menu.addSeparator()
+        menu.addAction(act_open)
+        menu.addAction(act_save)
+        menu.addAction(act_save_as)
+
+        # 버튼 아래에 팝업
+        sender = self.main_window.sender()
+        if sender:
+            pos = sender.mapToGlobal(sender.rect().bottomLeft())
+        else:
+            pos = self.main_window.mapToGlobal(self.main_window.rect().topLeft())
+        menu.exec(pos)
+
+    def _show_edit_menu(self):
+        """편집(E) 버튼 클릭 시 드롭다운 메뉴 표시"""
+        from PyQt6.QtWidgets import QMenu
+        from PyQt6.QtGui import QAction
+
+        menu = QMenu(self.main_window)
+        menu.setStyleSheet("""
+            QMenu {
+                font-family: '새굴림'; font-size: 11pt;
+                background-color: #ffffff; border: 1px solid #999;
+            }
+            QMenu::item:selected { background-color: #cce0f0; }
+            QMenu::separator { height: 1px; background: #ccc; margin: 2px 8px; }
+        """)
+
+        act_undo = QAction("실행 취소  (Ctrl+Z)", menu)
+        act_copy = QAction("복사  (Ctrl+C)", menu)
+        act_paste = QAction("붙이기  (Ctrl+V)", menu)
+        act_cut  = QAction("잘라내기  (Ctrl+X)", menu)
+
+        act_undo.triggered.connect(self.undo)
+        act_copy.triggered.connect(lambda: self.event_filter._handle_copy(
+            self.eulji_table) if self.eulji_table else None)
+        act_paste.triggered.connect(lambda: self.event_filter._handle_paste(
+            self.eulji_table) if self.eulji_table else None)
+        act_cut.triggered.connect(lambda: self.event_filter._handle_cut(
+            self.eulji_table) if self.eulji_table else None)
+
+        menu.addAction(act_undo)
+        menu.addSeparator()
+        menu.addAction(act_copy)
+        menu.addAction(act_paste)
+        menu.addAction(act_cut)
+
+        sender = self.main_window.sender()
+        if sender:
+            pos = sender.mapToGlobal(sender.rect().bottomLeft())
+        else:
+            pos = self.main_window.mapToGlobal(self.main_window.rect().topLeft())
+        menu.exec(pos)
+
+    # ================================================================
+    # 파일 메뉴 — 새 프로젝트 / 저장 / 열기 / 다른 이름으로 저장
+    # ================================================================
+
+    def on_new_project(self):
+        """파일(F) → 새 프로젝트"""
+
+        reply = QMessageBox.question(
+            self.main_window,
+            "새 프로젝트",
+            "현재 작업 내용이 사라집니다. 계속하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self.project_manager.new_project()
+
+    def on_save_project(self):
+        """파일(F) → 저장 (현재 파일에 덮어쓰기, 없으면 다른 이름으로 저장)"""
+        if self.project_manager.current_file:
+            ok = self.project_manager.save_project(self.project_manager.current_file)
+            if ok:
+                QMessageBox.information(
+                    self.main_window, "저장 완료",
+                    f"저장되었습니다:\n{self.project_manager.current_file}"
+                )
+            else:
+                QMessageBox.warning(self.main_window, "저장 실패", "파일 저장 중 오류가 발생했습니다.")
+        else:
+            self.on_save_project_as()
+
+    def on_save_project_as(self):
+        """파일(F) → 다른 이름으로 저장"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self.main_window,
+            "프로젝트 저장",
+            os.path.expanduser("~/Documents"),
+            "OASIS 프로젝트 (*.oasis);;모든 파일 (*)",
+        )
+        if not file_path:
+            return
+        if not file_path.endswith(".oasis"):
+            file_path += ".oasis"
+        ok = self.project_manager.save_project(file_path)
+        if ok:
+            QMessageBox.information(
+                self.main_window, "저장 완료",
+                f"저장되었습니다:\n{file_path}"
+            )
+        else:
+            QMessageBox.warning(self.main_window, "저장 실패", "파일 저장 중 오류가 발생했습니다.")
+
+    def on_open_project(self):
+        """파일(F) → 열기"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.main_window,
+            "프로젝트 열기",
+            os.path.expanduser("~/Documents"),
+            "OASIS 프로젝트 (*.oasis);;모든 파일 (*)",
+        )
+        if not file_path:
+            return
+        ok = self.project_manager.load_project(file_path)
+        if not ok:
+            QMessageBox.warning(
+                self.main_window, "열기 실패",
+                f"파일을 열 수 없습니다:\n{file_path}"
+            )
+
+
 
     def load_basic_work_template(self):
         """[Phase 2-4] 기초작업 템플릿 로드"""
@@ -440,8 +594,8 @@ class OutputDetailTab:
         """
 
         for menu_name, shortcut_key, callback_name in [
-            ("파일(F)", "F", None),
-            ("편집(E)", "E", None),
+            ("파일(F)", "F", "_show_file_menu"),
+            ("편집(E)", "E", "_show_edit_menu"),
             ("보기(V)", "V", None),
             ("도구(T)", "T", None),
             ("모듈(M)", "M", "_show_modules_menu"),
@@ -560,7 +714,6 @@ class OutputDetailTab:
         # 공종 카테고리 콤보박스 (우측 이동)
         self.gongjong_category_combo = QComboBox()
         self.gongjong_category_combo.setStyleSheet("font-family: '새굴림';")
-        self.gongjong_category_combo.setFixedWidth(120)
         self.gongjong_category_combo.setFixedWidth(120)
         self.gongjong_category_combo.addItems(["공통", "전기", "설비", "건축"])
         self.gongjong_category_combo.setCurrentText("전기")  # 기본값 전기 설정
@@ -1748,9 +1901,9 @@ class OutputDetailTab:
             },
             # Phase 6: 전문 기능
             "graphic_output": {
-                "class": "PDFOutputPopup",
+                "class": "GraphicOutputPopup",
                 "module": "popups.graphic_output_popup",
-                "title": "PDF 산출",
+                "title": "PDF 출력",
             },
             "cad_integration": {
                 "class": None,
@@ -1797,7 +1950,10 @@ class OutputDetailTab:
                 # 클래스인 경우 (모달ダイア로그)
                 if hasattr(submodule, class_name):
                     dlg_class = getattr(submodule, class_name)
-                    dlg = dlg_class(self.main_window, self.eulji_data)
+                    if class_name == "GraphicOutputPopup":
+                        dlg = dlg_class(parent_tab=self)
+                    else:
+                        dlg = dlg_class(self.main_window, self.eulji_data)
                     dlg.setWindowTitle(title)
                     dlg.exec()
                 else:

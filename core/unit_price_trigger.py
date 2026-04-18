@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 from PyQt6.QtCore import Qt
+from utils.logger import oasis_log
 
 # 산출일위표 패널 호출에서 제외할 특수 산출목록 텍스트 목록
 EXCLUDED_ITEM_TEXTS = [
@@ -19,7 +20,6 @@ class CalculationUnitPriceTrigger:
         self.parent_tab = parent_tab
         self.popup = None
         self._is_handling = False  # 재진입 방지 가드
-        # 절대 경로 로그 파일 설정
         import os
         self.debug_log = os.path.join(self.parent_tab.project_root, "debug_trigger.log")
 
@@ -38,11 +38,8 @@ class CalculationUnitPriceTrigger:
             item_col = self.parent_tab.EULJI_COLS["ITEM"]
             formula_col = self.parent_tab.EULJI_COLS["FORMULA"]
             
-            # [DEBUG] 로그 파일에 기록
-            try:
-                with open(self.debug_log, "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now()}] Trigger: row={row}, col={col}, item_col={item_col}, formula_col={formula_col}\n")
-            except: pass
+            # [DEBUG] 로그 (OASIS_DEBUG=1 환경변수 설정 시에만 기록)
+            oasis_log(f"Trigger: row={row}, col={col}, item_col={item_col}, formula_col={formula_col}", self.debug_log)
             
             # 산출목록(ITEM) 컬럼인 경우에만 산출일위표 표시
             if col == item_col:
@@ -55,10 +52,7 @@ class CalculationUnitPriceTrigger:
                 
                 # 제외 대상인 경우 산출일위표 표시하지 않음
                 if item_text in EXCLUDED_ITEM_TEXTS:
-                    try:
-                        with open(self.debug_log, "a", encoding="utf-8") as f:
-                            f.write(f"[{datetime.now()}] Excluded item '{item_text}' - skipping popup\n")
-                    except: pass
+                    oasis_log(f"Excluded item '{item_text}' - skipping popup", self.debug_log)
                     # 팝업이 표시 중이면 숨김
                     if self.popup and not self.popup.isHidden():
                         self.popup.hide_popup()
@@ -66,10 +60,7 @@ class CalculationUnitPriceTrigger:
                 
                 # 팝업 인스턴스 생성 (최초 1회)
                 if not self.popup:
-                    try:
-                        with open(self.debug_log, "a", encoding="utf-8") as f:
-                            f.write(f"[{datetime.now()}] Creating new CalculationUnitPricePopup instance...\n")
-                    except: pass
+                    oasis_log("Creating new CalculationUnitPricePopup instance...", self.debug_log)
                     # 모듈화된 경로에서 임포트
                     from popups.calculation_unit_price_popup import CalculationUnitPricePopup
                     self.popup = CalculationUnitPricePopup(self.parent_tab.main_window)
@@ -77,26 +68,17 @@ class CalculationUnitPriceTrigger:
                 # prepare_show는 항상 ITEM 컬럼 기준으로 호출
                 self.popup.prepare_show(self.parent_tab, row, item_col)
                 self.popup.show_popup()
-                
-                try:
-                    with open(self.debug_log, "a", encoding="utf-8") as f:
-                        f.write(f"[{datetime.now()}] Popup show requested for row {row} (clicked col={col})\n")
-                except: pass
+                oasis_log(f"Popup show requested for row {row} (clicked col={col})", self.debug_log)
             else:
                 # '산출목록' 외 컬럼 클릭 시 자동으로 팝업 숨기기
                 if self.popup and not self.popup.isHidden():
                     self.popup.hide_popup()
-                    try:
-                        with open(self.debug_log, "a", encoding="utf-8") as f:
-                            f.write(f"[{datetime.now()}] Popup hidden - focused on other column (col={col})\n")
-                    except: pass
+                    oasis_log(f"Popup hidden - focused on other column (col={col})", self.debug_log)
         except Exception as e:
             import traceback
             error_msg = f"[ERROR] handle_cell_selection failed: {e}\n{traceback.format_exc()}"
-            try:
-                with open(self.debug_log, "a", encoding="utf-8") as f:
-                    f.write(error_msg + "\n")
-            except: pass
+            oasis_log(error_msg, self.debug_log)
             print(error_msg)
         finally:
             self._is_handling = False
+

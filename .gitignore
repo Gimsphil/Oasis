@@ -1,37 +1,41 @@
-# Python cache
+# OASIS SANCHUL_Sheet_1 .gitignore
+
+# Python 캐시
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
+.Python
 
-# Virtual environments
+# 가상환경
 .venv/
 venv/
 env/
 
-# Build / packaging
-build/
-dist/
-*.egg-info/
-
-# Logs / runtime artifacts
-*.log
-bat_log.txt
+# 디버그 로그 파일 (OASIS 앱 생성)
+startup_debug.log
 tab_debug.log
+debug_trigger.log
+app_startup_debug.txt
+app_debug_output.txt
+*.log
 
-# OS / editor
-.DS_Store
-Thumbs.db
+# 산출일위표 조각파일 (임시 세션)
+data/unit_price_chunks/_unsaved_session_/
+
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
 
-# Local debug outputs
-_debug/*.log
-_scripts/*.log
-_scripts/done_flag.txt
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
 
-# Jupyter
-.ipynb_checkpoints/
-
-# SQLite temporary files
-*.db-journal
-*.db-wal
-*.db-shm
+# 빌드/배포
+dist/
+build/
+*.spec
+*.egg-info/

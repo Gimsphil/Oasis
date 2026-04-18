@@ -6,6 +6,7 @@ import subprocess
 import time
 import datetime
 from pathlib import Path
+from utils.logger import oasis_log
 
 BASE_DIR = Path(__file__).resolve().parent
 OASIS_ROOT = Path(os.getenv("OASIS_ROOT", BASE_DIR.parent))
@@ -22,48 +23,8 @@ if (sys.stdout.encoding or "").lower() != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# Redirect stdout/stderr to file for debugging
-class DebugOutput:
-    def __init__(self):
-        self.file = open("app_debug_output.txt", "w", encoding="utf-8")
-        self.terminal = sys.stdout
-    
-    def write(self, msg):
-        self.file.write(msg)
-        self.file.flush()
-        self.terminal.write(msg)
-    
-    def flush(self):
-        self.file.flush()
-        self.terminal.flush()
 
-# Uncomment this line to enable debug output to file
-# sys.stdout = DebugOutput()
-
-# [DEBUG] Critical File Logging
-def log_to_file(msg):
-    try:
-        with open(STARTUP_LOG_PATH, "a", encoding="utf-8") as f:
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"[{timestamp}] {msg}\n")
-    except:
-        pass
-
-log_to_file("=== Application Starting ===")
-log_to_file(f"Python executable: {sys.executable}")
-log_to_file(f"Current working directory: {os.getcwd()}")
-log_to_file(f"sys.path: {sys.path}")
-
-
-# Windows 콘솔 숨기기 (GUI만 표시)
-# try:
-#     import ctypes
-#     hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-#     ctypes.windll.user32.ShowWindow(hwnd, 0)  # 0 = SW_HIDE (콘솔 숨기기)
-# except:
-#     pass
-
-# 1. 시각적 디버깅용 메시지 박스 함수
+# 시각적 디버깅용 메시지 박스 함수
 def msgbox(title, text, style=0):
     """
     Windows Native Message Box를 띄웁니다.
@@ -74,43 +35,39 @@ def msgbox(title, text, style=0):
         print(f"[ERROR] Failed to show MessageBox: {e}")
         return 0
 
-# 2. 경로 설정 (중복 제거 및 명확화)
-# 현재 디렉토리와 하위 주요 폴더들을 sys.path에 추가하여 모듈 임포트 오류 방지
+
+def log_to_file(msg):
+    """시작 단계 로그 기록 (startup_debug.log)."""
+    try:
+        with open(STARTUP_LOG_PATH, "a", encoding="utf-8") as f:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{timestamp}] {msg}\n")
+    except Exception:
+        pass
+
+
+log_to_file("=== Application Starting ===")
+log_to_file(f"Python executable: {sys.executable}")
+log_to_file(f"Current working directory: {os.getcwd()}")
+
+# 프로젝트 루트를 sys.path 선두에 추가 (단일 항목)
 current_dir = str(BASE_DIR)
-module_paths = [
-    current_dir,
-    os.path.join(current_dir, "core"),
-    os.path.join(current_dir, "utils"),
-    os.path.join(current_dir, "ui"),
-    os.path.join(current_dir, "managers"),
-    os.path.join(current_dir, "popups")
-]
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
-for path in module_paths:
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
-print(f"[DEBUG] sys.path: {sys.path}")
-
-# 3. 필수 라이브러리 임포트
-# [FIX] 모듈 임포트 경로 표준화 및 불필요한 임포트 제거
+# 필수 라이브러리 임포트
 try:
-    print("Loading fonts and styles...")
     from PyQt6.QtWidgets import QApplication, QMainWindow
     from PyQt6.QtGui import QIcon
-    from output_detail_tab import OutputDetailTab 
-    
-    # app_style 임포트 확인
-    import app_style
-    print(f"[DEBUG] app_style imported from: {app_style.__file__}")
-    from app_style import register_fonts, get_main_stylesheet
-    
+    from output_detail_tab import OutputDetailTab
+    from core.app_style import register_fonts, get_main_stylesheet
+
 except Exception as e:
     error_msg = f"CRITICAL IMPORT ERROR:\n{str(e)}\n\n{traceback.format_exc()}"
-    print(error_msg) # 콘솔에도 출력
-    # 0x10 is MB_ICONHAND (Error) in Windows API
-    msgbox("Startup Error", error_msg, 0x10) 
+    print(error_msg)
+    msgbox("Startup Error", error_msg, 0x10)
     sys.exit(1)
+
 
 def main():
     # Write debug info to file IMMEDIATELY
@@ -221,3 +178,4 @@ if __name__ == "__main__":
         print("Press Enter to exit...")
         log_to_file("Waiting for user input to exit...")
         input()
+

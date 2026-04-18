@@ -342,35 +342,7 @@ def count_sections(formula: str) -> int:
         return 0
 
 
-def substitute_variables(formula: str, variables: dict) -> str:
-    """
-    수식에서 변수($H, $L 등)를 실제 값으로 치환
-
-    Args:
-        formula: 산출수식
-        예: "$Hm-1.8m"
-        variables: 변수 딕셔너리
-        예: {"$H": "3.5", "$L": "1.5"}
-
-    Returns:
-        str: 치환된 수식
-        예: "3.5m-1.8m"
-    """
-    if not formula:
-        return formula
-
-    result = formula
-
-    for var, value in variables.items():
-        # $H → 3.5
-        # $Hm → 3.5m (뒤의 단위 문자 보존)
-        if var in ["$H", "$L"]:
-            # $H 또는 $L 패턴 찾기 (뒤에 단위가 붙을 수 있음)
-            # "$Hm", "$H m", "$L*2" 등
-            if var in result:
-                result = result.replace(var, str(value))
-
-    return result
+# NOTE: substitute_variables() 는 위 L228에 단일 정의됨 (중복 제거됨)
 
 
 def parse_manual_item(text: str) -> dict:
